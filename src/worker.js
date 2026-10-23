@@ -89,8 +89,9 @@ async function enquiry(req, env, url) {
   let f;
   try { f = await req.formData(); } catch { return new Response('Bad request', { status: 400 }); }
   const g = k => String(f.get(k) || '').replace(/\r/g, '').trim();
-  const type = g('type') === 'message' ? 'message' : 'quote';
-  const back = type === 'message' ? '/' : '/quote/';
+  const formType = ['message', 'quick'].includes(g('type')) ? g('type') : 'quote';
+  const type = formType === 'message' ? 'message' : 'quote';
+  const back = formType === 'quote' ? '/quote/' : '/';
   const c = await content(env);
   // bots: hidden field filled in, form sent too fast, or an old/forged form
   if (g('website') || !(await checkToken(env, g('t')))) return Response.redirect(url.origin + '/thanks/?t=' + type, 303);
@@ -109,15 +110,16 @@ async function enquiry(req, env, url) {
   if (v.phone && !ph) errors.phone = 'Please give a UK phone number, like 07700 900123.';
   if (!v.email && !v.phone) errors.email = 'Please give an email address or a phone number so we can reply.';
   if (type === 'quote' && !v.area) errors.area = 'Please add your area or postcode.';
-  if (!v.details) errors.details = type === 'message' ? 'Please write your message.' : 'Please tell us a little about the job.';
+  if (formType === 'quick' && !v.phone) errors.phone = 'Please add a phone number so we can call you back.';
+  if (!v.details && formType !== 'quick') errors.details = type === 'message' ? 'Please write your message.' : 'Please tell us a little about the job.';
   if (Object.keys(errors).length) {
-    const html = renderPage(back, c, { origin: origin(c, url), token: await formToken(env), form: { type, values: v, errors } });
+    const html = renderPage(back, c, { origin: origin(c, url), token: await formToken(env), form: { type: formType, values: v, errors } });
     return page(html, url, 422);
   }
   const ipKey = 'erl:' + await sha256hex(req.headers.get('cf-connecting-ip') || 'unknown');
   const n = parseInt(await env.KV.get(ipKey), 10) || 0;
   if (n >= 6) {
-    const html = renderPage(back, c, { origin: origin(c, url), token: await formToken(env), form: { type, values: v, errors: { form: 'You\'ve sent a few messages already. Please wait an hour, or ring us instead.' } } });
+    const html = renderPage(back, c, { origin: origin(c, url), token: await formToken(env), form: { type: formType, values: v, errors: { form: 'You\'ve sent a few messages already. Please wait an hour, or ring us instead.' } } });
     return page(html, url, 429);
   }
   await env.KV.put(ipKey, String(n + 1), { expirationTtl: 3600 });
@@ -162,8 +164,8 @@ async function adminApi(req, env, path, m, s, url) {
     const before = withDefaults(await env.KV.get('content', 'json'));
     await env.KV.put('content', JSON.stringify(value));
     await env.KV.put('content:meta', JSON.stringify({ savedAt: new Date().toISOString(), savedBy: s.u }));
-    const keep = new Set(value.gallery.map(g => g.src));
-    for (const g of before.gallery) if (!keep.has(g.src)) await env.KV.delete('media:' + g.src.slice(7));
+    const keep = new Set(value.gallery.flatMap(g => [g.src, g.before].filter(Boolean)));
+    for (const g of before.gallery) for (const s of [g.src, g.before]) if (s && !keep.has(s)) await env.KV.delete('media:' + s.slice(7));
     await log(env, req, s.u, body.__note ? 'Saved: ' + String(body.__note).slice(0, 60) : 'Saved changes');
     return json({ ok: true, content: value, savedAt: new Date().toISOString() });
   }
@@ -266,7 +268,7 @@ async function tidyUp(env) {
   const c = await content(env);
   const cutoff = Date.now() - c.privacy.retentionMonths * 30.44 * 86400000;
   for (const e of await listEnquiries(env)) if (e.at && Date.parse(e.at) < cutoff) await env.KV.delete('enq:' + e.id);
-  const used = new Set(c.gallery.map(g => g.src.slice(7)));
+  const used = new Set(c.gallery.flatMap(g => [g.src, g.before].filter(Boolean).map(s => s.slice(7))));
   let cursor;
   do {
     const r = await env.KV.list({ prefix: 'media:', cursor });

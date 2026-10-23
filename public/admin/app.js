@@ -211,6 +211,20 @@ async function addPhotos(files, status) {
   render();
   if (ok) toast(ok === 1 ? 'Photo added. Add a caption, then Save.' : ok + ' photos added. Add captions, then Save.');
 }
+async function addBefore(g, file) {
+  try {
+    toast('Uploading the before photo…');
+    const s = await shrink(file);
+    const fd = new FormData(); fd.append('file', s.blob, 'before.jpg'); fd.append('w', s.w); fd.append('h', s.h);
+    const r = await api('POST', 'upload', fd, true);
+    g.before = r.src; g.featured = false; changed(); render(); toast('Before photo added. Save to show the slider on the website.');
+  } catch (e) { toast(e.message, true); }
+}
+function beforeTools(g, i) {
+  const pick = h('input', { type: 'file', accept: 'image/*', hidden: true, id: 'bf' + i, onchange: e => { if (e.target.files[0]) addBefore(g, e.target.files[0]); } });
+  if (g.before) return h('div', { class: 'before-row' }, h('img', { src: g.before, alt: 'Before photo', class: 'before-thumb' }), h('span', { class: 'small' }, h('strong', null, 'Before & after slider'), h('br'), h('span', { class: 'muted' }, 'This photo shows as the "after".')), h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { g.before = ''; changed(); render(); } }, 'Remove before'));
+  return h('div', null, pick, h('button', { class: 'btn btn-sm', type: 'button', onclick: () => $('bf' + i).click() }, '+ Add a "before" photo'), h('span', { class: 'hint' }, 'Makes a before & after slider. Take it from the same spot.'));
+}
 function photos() {
   const status = h('p', { class: 'small muted', 'aria-live': 'polite' });
   const input = h('input', { type: 'file', accept: 'image/*', multiple: true, id: 'pick', hidden: true, onchange: async e => { const zone = e.target.closest('.drop'); zone.classList.add('busy'); await addPhotos(e.target.files, status); e.target.value = ''; } });
@@ -219,16 +233,17 @@ function photos() {
     input, h('button', { class: 'btn btn-red', type: 'button', onclick: () => $('pick').click() }, 'Choose photos'), status);
   const G = draft.gallery;
   return [
-    head('Photos', 'Only use photos of your own work. The photo marked "Show at the top" appears on the home page.'),
+    head('Photos', 'Only use photos of your own work. Photos also appear next to the matching service on the home page (by Type). Add a "before" photo to make a before & after slider.'),
     zone, h('p', { class: 'small muted' }, `${G.length} of 60 photos.`),
     G.length ? h('div', { class: 'photos' }, G.map((g, i) => h('div', { class: 'ph' },
       h('img', { src: g.src, alt: g.caption || 'Uploaded photo ' + (i + 1), loading: 'lazy' }),
       h('div', { class: 'body' },
         text(g, 'caption', 'Caption', { ph: 'e.g. Lounge repaint in soft grey', max: 140 }),
         h('div', { class: 'row2' }, text(g, 'area', 'Area', { ph: 'e.g. Tettenhall', max: 40 }), select(g, 'kind', 'Type', KINDS)),
-        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: g.featured, onchange: e => { G.forEach(x => x.featured = false); g.featured = e.target.checked; changed(); render(); } }), 'Show at the top of the home page'),
+        beforeTools(g, i),
+        g.before ? null : h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: g.featured, onchange: e => { G.forEach(x => x.featured = false); g.featured = e.target.checked; changed(); render(); } }), 'Show at the top of the home page'),
         h('div', { class: 'tools' }, h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Move earlier', onclick: () => move(G, i, -1), disabled: i === 0 }, '↑'), h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Move later', onclick: () => move(G, i, 1), disabled: i === G.length - 1 }, '↓'),
-          removeBtn('ph' + i, () => { G.splice(i, 1); changed(); render(); })))))) : h('div', { class: 'empty' }, 'No photos yet. Until you add some, the home page shows a colour card of your services instead.')
+          removeBtn('ph' + i, () => { G.splice(i, 1); changed(); render(); })))))) : h('div', { class: 'empty' }, 'No photos yet. Until you add some, the website shows painted colour panels instead.')
   ];
 }
 
@@ -288,6 +303,10 @@ function websiteText() {
       h('h3', null, 'How you work'),
       A.map((a, i) => h('div', { class: 'item' }, h('div', { class: 'item-h' }, h('strong', null, a.title || 'New point'), removeBtn('ap' + i, () => { A.splice(i, 1); changed(); render(); })), text(a, 'title', 'Heading', { max: 60 }), text(a, 'text', 'Text', { max: 300 }))),
       A.length < 6 ? h('button', { class: 'btn', type: 'button', onclick: () => { A.push({ title: '', text: '' }); changed(); render(); } }, 'Add a point') : null),
+    h('div', { class: 'card' }, h('h2', null, 'Questions people ask (FAQ)'), h('p', { class: 'small muted' }, 'Shown on the home and services pages. Google can show these in search results too.'),
+      draft.faqs.map((f, i) => h('div', { class: 'item' }, h('div', { class: 'item-h' }, h('strong', null, f.q || 'New question'), h('span', { class: 'tools' }, h('button', { class: 'btn btn-sm', type: 'button', onclick: () => move(draft.faqs, i, -1), disabled: i === 0, 'aria-label': 'Move up' }, '↑'), removeBtn('fq' + i, () => { draft.faqs.splice(i, 1); changed(); render(); }))),
+        text(f, 'q', 'Question', { max: 160 }), text(f, 'a', 'Answer', { area: true, rows: 3, max: 1200 }))),
+      draft.faqs.length < 12 ? h('button', { class: 'btn', type: 'button', onclick: () => { draft.faqs.push({ q: '', a: '' }); changed(); render(); } }, 'Add a question') : null),
     h('div', { class: 'card' }, h('h2', null, 'Areas covered'), lines(draft, 'areas', 'Towns and areas', 'One per line, most important first.'))
   ];
 }

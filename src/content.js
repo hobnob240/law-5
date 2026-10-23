@@ -28,7 +28,7 @@ export const DEFAULTS = {
     story: '',
     approach: [
       { title: 'Proper preparation', text: 'Filling, sanding, making good and priming where needed, so the finish looks better and lasts longer.' },
-      { title: 'Tidy working', text: 'Floors and furniture covered, clean edges and even coverage, and the room left as we found it, only better.' },
+      { title: 'Tidy finishing', text: 'Clean edges, even coverage and a finished space that looks refreshed and cared for.' },
       { title: 'Clear quotes', text: 'Each quote is based on the size of the job, the condition of the surfaces and the finish you want.' }
     ]
   },
@@ -39,6 +39,13 @@ export const DEFAULTS = {
     { title: 'Commercial decorating', text: 'Business spaces that look clean and well kept.', items: ['Shops and offices', 'Communal areas and hallways', 'Small business premises'] }
   ],
   areas: ['Wolverhampton', 'Tettenhall', 'Bilston', 'Wombourne', 'Willenhall'],
+  faqs: [
+    { q: 'How much will my decorating cost?', a: 'Every job is different. The price depends on the size of the rooms, the condition of the walls and woodwork, and how much preparation is needed. Send a few details and we\'ll give you a free, no-obligation quote.' },
+    { q: 'Do I need to choose my colours before you quote?', a: 'No. Just tell us whether you\'ve chosen, have a rough idea or haven\'t started yet. The quote is based on the work involved, not the colour.' },
+    { q: 'Which areas do you cover?', a: 'We\'re based in Wolverhampton and cover Tettenhall, Bilston, Wombourne, Willenhall and nearby. If you\'re just outside, ask anyway.' },
+    { q: 'Do you work for landlords and businesses?', a: 'Yes. We repaint rental properties between tenants and decorate shops, offices and communal areas, as well as homes.' },
+    { q: 'Can I send photos instead of booking a visit?', a: 'Yes. Photos of the rooms help us give you a quicker idea of price. Mention it in the quote form and we\'ll tell you where to send them.' }
+  ],
   gallery: [],
   reviews: [],
   seo: {
@@ -50,7 +57,7 @@ export const DEFAULTS = {
   privacy: { retentionMonths: 12 }
 };
 
-export const LIMITS = { services: 8, items: 10, areas: 20, gallery: 60, reviews: 40, approach: 6 };
+export const LIMITS = { services: 8, items: 10, areas: 20, gallery: 60, reviews: 40, approach: 6, faqs: 12 };
 const MEDIA_SRC = /^\/media\/[a-f0-9-]{36}\.(jpg|png|webp)$/;
 
 const str = (v, max) => String(v == null ? '' : v).replace(/\r/g, '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, max);
@@ -105,11 +112,13 @@ export function validateContent(input) {
     areas: [...new Set((Array.isArray(c.areas) ? c.areas : []).map(a => str(a, 40)).filter(Boolean))].slice(0, LIMITS.areas),
     gallery: (Array.isArray(c.gallery) ? c.gallery : []).slice(0, LIMITS.gallery).map(g => ({
       src: MEDIA_SRC.test(String(g && g.src)) ? g.src : '',
+      before: MEDIA_SRC.test(String(g && g.before)) ? g.before : '',
       caption: str(g && g.caption, 140), area: str(g && g.area, 40),
       kind: KINDS.includes(g && g.kind) ? g.kind : 'Interior',
       featured: bool(g && g.featured),
       w: Math.max(0, Math.min(10000, parseInt(g && g.w, 10) || 0)), h: Math.max(0, Math.min(10000, parseInt(g && g.h, 10) || 0))
     })).filter(g => g.src),
+    faqs: (Array.isArray(c.faqs) ? c.faqs : []).slice(0, LIMITS.faqs).map(f => ({ q: str(f && f.q, 160), a: str(f && f.a, 1200) })).filter(f => f.q && f.a),
     reviews: (Array.isArray(c.reviews) ? c.reviews : []).slice(0, LIMITS.reviews).map(r => ({
       name: str(r && r.name, 60), area: str(r && r.area, 40), text: str(r && r.text, 1200),
       rating: Math.max(1, Math.min(5, parseInt(r && r.rating, 10) || 5)),
@@ -136,4 +145,5 @@ export function validateContent(input) {
   return { value, errors };
 }
 
-export const withDefaults = raw => raw ? validateContent(raw).value : validateContent(DEFAULTS).value;
+// older saved content has no FAQ list yet: start it from the defaults
+export const withDefaults = raw => validateContent(raw ? { ...raw, faqs: Array.isArray(raw.faqs) ? raw.faqs : DEFAULTS.faqs } : DEFAULTS).value;
