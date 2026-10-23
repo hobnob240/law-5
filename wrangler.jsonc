@@ -1,0 +1,19 @@
+{
+  // Law and Son Decorators: website + admin + enquiry inbox
+  "name": "law-and-son",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "none",
+    "html_handling": "auto-trailing-slash"
+  },
+  "kv_namespaces": [
+    { "binding": "KV", "id": "15b2908341614afaa5a036bbccfc0847" }
+  ],
+  // once a day: delete old enquiries (privacy setting) and unused photo uploads
+  "triggers": { "crons": ["23 3 * * *"] },
+  "observability": { "enabled": true }
+}

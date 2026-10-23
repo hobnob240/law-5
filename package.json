@@ -1,0 +1,21 @@
+{
+  "name": "law-and-son",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "SETUP_CODE": {
+        "description": "Make up any phrase of 8 or more characters (for example three random words). You type it once at /admin to create your login. Keep it private."
+      },
+      "KV": {
+        "description": "Storage for the website text, photos and enquiries. Leave as \"Create new\"."
+      }
+    }
+  }
+}
