@@ -5,7 +5,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const paras = s => String(s || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean).map(p => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthYear = d => d ? MON[+d.slice(5, 7) - 1] + ' ' + d.slice(0, 4) : '';
-const V = 'v=4';
+const V = 'v=5';
 
 const I = {
   phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>',
@@ -67,7 +67,7 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema).replace(
 ${B.phone || B.hours ? `<div class="topline"><div class="wrap topline-in"><span>${I.pin}Painter &amp; decorator in ${esc(B.town)}</span>${B.hours ? `<span class="tl-hide">${I.clock}${esc(B.hours)}</span>` : ''}${B.phone ? `<a href="${telHref(B.phone)}">${I.phone}${esc(prettyPhone(B.phone))}</a>` : ''}</div></div>` : ''}
 <header class="site-head">
   <div class="wrap head-in">
-    <a class="brand" href="/" aria-label="${esc(B.name)}, home"><picture><source srcset="/assets/logo-sm.webp" type="image/webp"><img src="/assets/logo.jpg" alt="${esc(B.name)} logo" width="300" height="200"></picture></a>
+    <a class="brand" href="/" aria-label="${esc(B.name)}, home"><img src="/assets/logo.svg" alt="${esc(B.name)}" width="513" height="140"></a>
     <button class="menu-btn" type="button" aria-expanded="false" aria-controls="nav"><span></span><span></span><span></span><span class="sr">Menu</span></button>
     <nav id="nav" class="nav" aria-label="Main">
       ${nav.map(([h, l]) => `<a href="${h}"${h === path ? ' aria-current="page"' : ''}${h === '/quote/' ? ' class="nav-quote"' : ''}>${l}</a>`).join('')}
@@ -91,7 +91,7 @@ function footer(c) {
   <div class="foot-paint" aria-hidden="true"></div>
   <div class="wrap foot-grid">
     <div class="foot-brand">
-      <picture><source srcset="/assets/logo-sm.webp" type="image/webp"><img src="/assets/logo.jpg" alt="" width="300" height="200" loading="lazy"></picture>
+      <img src="/assets/logo-dark.svg" alt="" width="513" height="140" loading="lazy">
       <p>Painting and decorating in ${esc(B.town)} and nearby.</p>
       ${B.owner ? `<p class="foot-owner">${esc(B.owner)}</p>` : ''}
     </div>
@@ -278,7 +278,7 @@ function home(c, o) {
     </div>
     <div class="intro-side">
       <p>${esc(B.owner || `We paint and decorate homes, rental properties and business premises across ${B.town} and the surrounding areas.`)}</p>
-      <div class="intro-logo"><picture><source srcset="/assets/logo.webp" type="image/webp"><img src="/assets/logo.jpg" alt="${esc(B.name)} logo" width="720" height="480" loading="lazy"></picture></div>
+      <div class="intro-logo"><img src="/assets/logo-stacked.svg" alt="${esc(B.name)} logo" width="483" height="402" loading="lazy"></div>
     </div>
   </div>
 </section>
@@ -370,7 +370,7 @@ function about(c) {
   const B = c.business;
   return `${pageHead('About', `About ${esc(B.name)}`, B.owner ? esc(B.owner) : `A ${esc(B.town)} painting and decorating business working for homeowners, landlords and local businesses.`)}
 <section class="band about-intro"><div class="wrap about-grid">
-  <div class="about-logo"><picture><source srcset="/assets/logo.webp" type="image/webp"><img src="/assets/logo.jpg" alt="${esc(B.name)} logo" width="720" height="480" loading="lazy"></picture></div>
+  <div class="about-logo"><img src="/assets/logo-stacked.svg" alt="${esc(B.name)} logo" width="483" height="402" loading="lazy"></div>
   <div class="prose">${c.about.story ? paras(c.about.story) : `<p>${esc(B.name)} paints and decorates homes, rental properties and business premises across ${esc(B.town)} and the surrounding areas.</p><p>From a single room to a full repaint inside and out, every job gets the same careful preparation, tidy working and clean finish.</p>`}</div>
 </div></section>
 ${c.about.approach.length ? `<section class="band why painted-soft"><div class="wrap"><div class="why-card wide"><p class="marker">How we work</p><h2>What you can expect</h2><ul class="why-list cols">${c.about.approach.map(a => `<li><span class="why-ic">${I.check}</span><div><h3>${esc(a.title)}</h3><p>${esc(a.text)}</p></div></li>`).join('')}</ul></div></div></section>` : ''}
@@ -430,7 +430,7 @@ function cta(c) {
 
 function schemaFor(c, o) {
   const B = c.business;
-  const s = { '@context': 'https://schema.org', '@type': 'HousePainter', name: B.name, url: o.origin + '/', image: o.origin + '/assets/logo.jpg', logo: o.origin + '/assets/logo.jpg',
+  const s = { '@context': 'https://schema.org', '@type': 'HousePainter', name: B.name, url: o.origin + '/', image: o.origin + '/assets/og.png', logo: o.origin + '/assets/logo.png',
     areaServed: c.areas.map(a => ({ '@type': 'Place', name: a })), address: { '@type': 'PostalAddress', addressLocality: B.town, addressCountry: 'GB' } };
   if (B.phone) s.telephone = '+44' + B.phone.slice(1);
   if (B.email) s.email = B.email;
