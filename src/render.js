@@ -5,7 +5,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const paras = s => String(s || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean).map(p => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthYear = d => d ? MON[+d.slice(5, 7) - 1] + ' ' + d.slice(0, 4) : '';
-const V = 'v=3';
+const V = 'v=4';
 
 const I = {
   phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>',
@@ -55,10 +55,9 @@ function shell(c, o, { path, title, description, body, noindex, schema }) {
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
-<link rel="preload" as="image" href="/assets/paint-bg-sm.webp" media="(max-width: 860px)">
-<link rel="preload" as="image" href="/assets/paint-bg.webp" media="(min-width: 861px)">
+${path === '/' ? `<link rel="preload" as="image" href="/assets/img/hero-sm.webp" media="(max-width: 700px)"><link rel="preload" as="image" href="/assets/img/hero.webp" media="(min-width: 701px)">` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..900&family=Permanent+Marker&family=Source+Sans+3:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..900&family=Source+Sans+3:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="/assets/site.css?${V}">
 <script src="/assets/site.js?${V}" defer></script>
 ${schema ? `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>` : ''}
@@ -233,93 +232,111 @@ function messageForm(c, o) {
 }
 
 /* ---------------- pages ---------------- */
+const STOCK = [
+  { src: '/assets/img/interior.webp', alt: 'Living room interior' },
+  { src: '/assets/img/exterior.webp', alt: 'House front with a painted front door' },
+  { src: '/assets/img/landlord.webp', alt: 'Modern kitchen interior' }
+];
+function serviceMedia(c, s, i) {
+  const real = c.gallery.find(g => !g.before && g.kind && s.title.toLowerCase().startsWith(g.kind.toLowerCase()));
+  if (real) return photo(real);
+  if (STOCK[i]) return `<img src="${STOCK[i].src}" alt="${STOCK[i].alt}" width="1000" height="${i === 1 ? 750 : 668}" loading="lazy" decoding="async">`;
+  return `<span class="svc-paint sw${i % 4}" aria-hidden="true"></span>`;
+}
 function home(c, o) {
   const B = c.business;
   const pairs = c.gallery.filter(g => g.before);
   const work = c.gallery.filter(g => !g.before).slice(0, 7);
-  const featured = c.gallery.find(g => g.featured && !g.before);
-  const kindPhoto = k => c.gallery.find(g => g.kind && k.toLowerCase().startsWith(g.kind.toLowerCase()) && !g.before);
   const rv = c.reviews;
+  const trust = trustItems(c);
   return `
-<section class="hero painted">
+<section class="hero">
+  <picture class="hero-bg"><source media="(max-width: 700px)" srcset="/assets/img/hero-sm.webp"><img src="/assets/img/hero.webp" alt="" width="1900" height="1178" fetchpriority="high"></picture>
   <div class="wrap hero-grid">
-    <div class="hero-copy">
-      <p class="marker">Clean work · Honest service · Quality finish</p>
+    <div class="hero-copy rise">
+      <p class="marker light">Painter &amp; decorator · ${esc(B.town)}</p>
       <h1>${esc(c.home.headline)}</h1>
       ${c.home.intro ? `<p class="lede">${esc(c.home.intro)}</p>` : ''}
       <div class="hero-actions">
         <a class="btn btn-red btn-big" href="#quick-quote">Get a free quote</a>
-        ${B.phone ? `<a class="btn btn-white btn-big" href="${telHref(B.phone)}">${I.phone}<span>${esc(prettyPhone(B.phone))}</span></a>` : `<a class="btn btn-white btn-big" href="/services/">Our services</a>`}
+        ${B.phone ? `<a class="btn btn-glass btn-big" href="${telHref(B.phone)}">${I.phone}<span>${esc(prettyPhone(B.phone))}</span></a>` : `<a class="btn btn-glass btn-big" href="/services/">Explore services</a>`}
       </div>
-      ${rv.length ? `<div class="hero-proof">${stars(Math.round(avg(rv)))}<span><strong>${avg(rv).toFixed(1)}</strong> · “${esc(rv[0].text.length > 90 ? rv[0].text.slice(0, 88).trim() + '…' : rv[0].text)}” <em>${esc(rv[0].name)}</em></span></div>` : ''}
+      ${rv.length ? `<div class="hero-proof">${stars(Math.round(avg(rv)))}<span><strong>${avg(rv).toFixed(1)}/5</strong> from ${rv.length} customer review${rv.length === 1 ? '' : 's'}</span></div>` : ''}
     </div>
-    <div class="hero-card">${quickForm(c, o)}</div>
+    <div class="hero-card rise rise-2">${quickForm(c, o)}</div>
   </div>
-  <div class="brush-edge" aria-hidden="true"></div>
+  <div class="paint-tear" aria-hidden="true"></div>
 </section>
 
-<section class="trust" aria-label="Why people choose us"><div class="wrap"><ul class="trust-list">${trustItems(c).map(x => `<li>${x}</li>`).join('')}</ul></div></section>
+<section class="trust-wrap" aria-label="Why people choose us"><div class="wrap"><ul class="trust-card">${trust.map(x => `<li>${x}</li>`).join('')}</ul></div></section>
 
-${featured ? `<section class="band showcase"><div class="wrap showcase-in"><figure class="tilt">${photo(featured)}${featured.caption ? `<figcaption>${esc(featured.caption)}</figcaption>` : ''}</figure><div><p class="marker">Recent job</p><h2>${esc(featured.caption || 'A recent job')}</h2><p>${featured.area ? `Finished in ${esc(featured.area)}. ` : ''}Every job starts with proper preparation, so the finish looks sharp and lasts.</p><a class="link-arrow" href="/our-work/">See more of our work</a></div></div></section>` : ''}
+<section class="band intro">
+  <div class="wrap intro-grid">
+    <div>
+      <p class="marker">${esc(B.name)}</p>
+      <h2 class="big-statement">Careful preparation. Tidy work. <span class="paint-word">A finish that lasts.</span></h2>
+    </div>
+    <div class="intro-side">
+      <p>${esc(B.owner || `We paint and decorate homes, rental properties and business premises across ${B.town} and the surrounding areas.`)}</p>
+      <div class="intro-logo"><picture><source srcset="/assets/logo.webp" type="image/webp"><img src="/assets/logo.jpg" alt="${esc(B.name)} logo" width="720" height="480" loading="lazy"></picture></div>
+    </div>
+  </div>
+</section>
 
 <section class="band services-band">
   <div class="wrap">
-    <div class="sec-head center"><p class="marker">What we do</p><h2 class="stroke">Decorating, inside and out</h2></div>
-    <div class="svc-zig">
-      ${c.services.map((s, i) => { const ph = kindPhoto(s.title); return `<article class="zig ${i % 2 ? 'rev' : ''}">
-        <div class="zig-media ${ph ? '' : 'swatch sw' + (i % 4)}">${ph ? photo(ph) : `<span class="zig-word">${esc(s.title.split(' ')[0])}</span>`}</div>
-        <div class="zig-copy"><h3>${esc(s.title)}</h3><p>${esc(s.text)}</p>${s.items.length ? `<ul class="ticks">${s.items.map(x => `<li>${I.check}<span>${esc(x)}</span></li>`).join('')}</ul>` : ''}<a class="link-arrow" href="/quote/">Get a quote for ${esc(s.title.toLowerCase())}</a></div>
-      </article>`; }).join('')}
+    <div class="sec-head"><div><p class="marker">Services</p><h2>What we do</h2></div><a class="link-arrow" href="/services/">All services</a></div>
+    <div class="svc-cards">
+      ${c.services.map((s, i) => `<a class="svc-card" href="/services/#s${i + 1}">
+        <div class="svc-img">${serviceMedia(c, s, i)}</div>
+        <div class="svc-body"><h3>${esc(s.title)}</h3><p>${esc(s.text)}</p><span class="svc-more">Find out more</span></div>
+      </a>`).join('')}
     </div>
   </div>
 </section>
 
 ${pairs.length ? `<section class="band ba-band"><div class="wrap">
-  <div class="sec-head"><div><p class="marker">Transformations</p><h2>Before &amp; after</h2></div><p class="sec-note">Drag the slider to see the difference.</p></div>
+  <div class="sec-head"><div><p class="marker light">Transformations</p><h2>Before &amp; after</h2></div><p class="sec-note">Drag the slider to compare.</p></div>
   <div class="ba-grid ${pairs.length === 1 ? 'one' : ''}">${pairs.slice(0, 4).map(beforeAfter).join('')}</div>
 </div></section>` : ''}
+
+<section class="band process painted">
+  <div class="wrap">
+    <div class="sec-head center"><p class="marker">How it works</p><h2>From first message to final coat</h2></div>
+    <ol class="steps">
+      <li><span class="step-n">1</span><h3>Tell us about the job</h3><p>Use the quick form or ring${B.whatsapp ? ', or WhatsApp photos of the rooms' : ''}.</p></li>
+      <li><span class="step-n">2</span><h3>Get your quote</h3><p>${esc(B.replyPromise || 'We\'ll get back to you with a price.')}${B.freeQuotes ? ' Free, with no obligation.' : ''}</p></li>
+      <li><span class="step-n">3</span><h3>Pick a start date</h3><p>Choose a date that suits you. We prepare properly, work tidily and leave a clean finish.</p></li>
+    </ol>
+  </div>
+</section>
 
 ${work.length ? `<section class="band work-band"><div class="wrap">
   <div class="sec-head"><div><p class="marker">Our work</p><h2>Recent jobs</h2></div><a class="link-arrow" href="/our-work/">See all photos</a></div>
   <div class="masonry">${work.map(workCard).join('')}</div>
 </div></section>` : ''}
 
-<section class="band why painted-soft">
-  <div class="wrap why-grid">
-    <div class="why-card">
-      <p class="marker">Why ${esc(B.name)}</p>
-      <h2>A finish you'll be happy to live with</h2>
-      ${B.owner ? `<p class="why-owner">${esc(B.owner)}</p>` : ''}
-      <ul class="why-list">${c.about.approach.map(a => `<li><span class="why-ic">${I.check}</span><div><h3>${esc(a.title)}</h3><p>${esc(a.text)}</p></div></li>`).join('')}</ul>
-    </div>
-    <ol class="timeline" aria-label="How it works">
-      <li><span class="tl-n">1</span><div><h3>Tell us about the job</h3><p>Use the quick form, ring${B.whatsapp ? ', or WhatsApp photos of the rooms' : ''}.</p></div></li>
-      <li><span class="tl-n">2</span><div><h3>Get your quote</h3><p>${esc(B.replyPromise || 'We\'ll get back to you with a price.')}${B.freeQuotes ? ' Free, with no obligation.' : ''}</p></div></li>
-      <li><span class="tl-n">3</span><div><h3>Pick a start date</h3><p>Choose a date that suits you. We prepare properly, work tidily and leave a clean finish.</p></div></li>
-    </ol>
-  </div>
-</section>
-
 ${rv.length ? `<section class="band reviews-band"><div class="wrap">
-  <div class="sec-head"><div><p class="marker">Reviews</p><h2>What customers say</h2></div>${c.links.google ? `<a class="link-arrow" href="${esc(c.links.google)}" rel="noopener" target="_blank">All our Google reviews</a>` : ''}</div>
-  <div class="rv-layout">${reviewCard(rv[0], 'big')}${rv.length > 1 ? `<div class="rv-side">${rv.slice(1, 3).map(r => reviewCard(r)).join('')}</div>` : ''}</div>
+  <div class="rv-hero">${I.quote}<blockquote><p>${esc(rv[0].text)}</p><footer>${stars(rv[0].rating)}<span><strong>${esc(rv[0].name)}</strong>${rv[0].area ? `, ${esc(rv[0].area)}` : ''} · ${esc(rv[0].source)}</span></footer></blockquote></div>
+  ${rv.length > 1 ? `<div class="review-grid">${rv.slice(1, 4).map(r => reviewCard(r)).join('')}</div>` : ''}
+  ${c.links.google ? `<p class="center-link"><a class="link-arrow" href="${esc(c.links.google)}" rel="noopener" target="_blank">Read all our Google reviews</a></p>` : ''}
 </div></section>` : ''}
 
 ${faqBlock(c)}
 
 <section class="band areas-band" id="areas"><div class="wrap areas-in">
-  <div><p class="marker">Where we work</p><h2>Covering ${esc(B.town)} and nearby</h2><p>If you're just outside these areas, ask anyway.</p></div>
+  <div><p class="marker light">Where we work</p><h2>Covering ${esc(B.town)} and nearby</h2><p>If you're just outside these areas, ask anyway.</p></div>
   <ul class="area-list">${c.areas.map(a => `<li>${I.pin}${esc(a)}</li>`).join('')}</ul>
 </div></section>
 
 <section class="band contact-band" id="contact"><div class="wrap contact-grid">
-  <div><p class="marker">Got a question?</p><h2>Send us a quick message</h2><p class="muted">Not ready for a quote? Ask us anything.</p>${messageForm(c, o)}</div>
+  <div><p class="marker">Got a question?</p><h2>Send us a message</h2><p class="muted">Not ready for a quote? Ask us anything.</p>${messageForm(c, o)}</div>
   ${contactPanel(c)}
 </div></section>`;
 }
 
 function pageHead(kicker, title, lede) {
-  return `<section class="page-head painted"><div class="wrap"><p class="marker">${kicker}</p><h1>${title}</h1>${lede ? `<p class="lede">${lede}</p>` : ''}</div><div class="brush-edge" aria-hidden="true"></div></section>`;
+  return `<section class="page-head"><div class="wrap"><p class="marker light">${kicker}</p><h1>${title}</h1>${lede ? `<p class="lede">${lede}</p>` : ''}</div><div class="paint-tear" aria-hidden="true"></div></section>`;
 }
 
 function services(c) {
@@ -372,14 +389,14 @@ function quote(c, o) {
 
 function thanks(c, o) {
   const B = c.business, isMsg = o.query && o.query.get('t') === 'message';
-  return `<section class="page-head painted thanks"><div class="wrap">
-  <p class="marker">${isMsg ? 'Message sent' : 'Quote request sent'}</p>
+  return `<section class="page-head thanks"><div class="wrap">
+  <p class="marker light">${isMsg ? 'Message sent' : 'Quote request sent'}</p>
   <h1>Thanks, we've got it.</h1>
   <p class="lede">${esc(B.replyPromise || 'We\'ll be in touch soon.')}</p>
   ${B.phone ? `<p>If it's urgent, call <a href="${telHref(B.phone)}">${esc(prettyPhone(B.phone))}</a>.</p>` : ''}
   ${B.whatsapp ? `<p>You can also <a href="${waHref(B.whatsapp)}" rel="noopener" target="_blank">WhatsApp us photos of the rooms</a> to speed things up.</p>` : ''}
   <p class="row-btns"><a class="btn btn-ink" href="/">Back to the home page</a></p>
-</div><div class="brush-edge" aria-hidden="true"></div></section>`;
+</div><div class="paint-tear" aria-hidden="true"></div></section>`;
 }
 
 function privacy(c) {
@@ -408,7 +425,7 @@ function notFound() {
 
 function cta(c) {
   const B = c.business;
-  return `<section class="band cta-band painted"><div class="wrap cta-in"><div><p class="marker">Ready when you are</p><h2>Need a decorator in ${esc(B.town)}?</h2></div><div class="row-btns"><a class="btn btn-red btn-big" href="/quote/">Get a ${B.freeQuotes ? 'free ' : ''}quote</a>${B.phone ? `<a class="btn btn-white btn-big" href="${telHref(B.phone)}">${I.phone}<span>${esc(prettyPhone(B.phone))}</span></a>` : ''}</div></div></section>`;
+  return `<section class="band cta-band"><div class="wrap cta-in"><div><p class="marker light">Ready when you are</p><h2>Need a decorator in ${esc(B.town)}?</h2></div><div class="row-btns"><a class="btn btn-red btn-big" href="/quote/">Get a ${B.freeQuotes ? 'free ' : ''}quote</a>${B.phone ? `<a class="btn btn-white btn-big" href="${telHref(B.phone)}">${I.phone}<span>${esc(prettyPhone(B.phone))}</span></a>` : ''}</div></div></section>`;
 }
 
 function schemaFor(c, o) {
