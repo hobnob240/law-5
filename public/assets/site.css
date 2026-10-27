@@ -1,6 +1,6 @@
 /* Book a Medium Night — site styles. Fonts are self-hosted (no third-party requests). */
-@font-face { font-family: "Lora"; src: url(/assets/fonts/lora.woff) format("woff"); font-weight: 400 700; font-style: normal; font-display: swap; }
-@font-face { font-family: "Lora"; src: url(/assets/fonts/lora-italic.woff) format("woff"); font-weight: 400 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "BMN Serif"; src: url(/assets/fonts/lora.woff) format("woff"); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "BMN Serif"; src: url(/assets/fonts/lora-italic.woff) format("woff"); font-weight: 400 700; font-style: italic; font-display: swap; }
 @font-face { font-family: "Inter"; src: url(/assets/fonts/inter-400.woff) format("woff"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "Inter"; src: url(/assets/fonts/inter-600.woff) format("woff"); font-weight: 600; font-display: swap; }
 @font-face { font-family: "Inter"; src: url(/assets/fonts/inter-700.woff) format("woff"); font-weight: 700; font-display: swap; }
@@ -11,7 +11,7 @@
   --gold: #c9a24a; --gold2: #e6c77a; --gold-ink: #8a6a1f;
   --ivory: #fbf7ef; --paper: #ffffff; --line: #e7e1d3; --soft: #f4efe4;
   --ok: #1d6b46; --bad: #b42318;
-  --serif: "Lora", Georgia, "Times New Roman", serif;
+  --serif: "BMN Serif", Georgia, "Times New Roman", serif;
   --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --r: 18px; --r-sm: 12px;
   --shadow: 0 1px 2px rgba(22,17,47,.06), 0 12px 32px -12px rgba(22,17,47,.18);

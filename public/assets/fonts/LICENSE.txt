@@ -1,0 +1,7 @@
+Fonts used on this website
+
+Inter: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
+"BMN Serif" is a subset of Lora: Copyright 2011 The Lora Project Authors (https://github.com/cyrealtype/Lora-Cyrillic), with Reserved Font Name "Lora". Renamed because it has been modified (subset).
+
+Both are licensed under the SIL Open Font License, Version 1.1.
+The full licence is available at https://openfontlicense.org

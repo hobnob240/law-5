@@ -1,11 +1,11 @@
-@font-face { font-family: "Lora"; src: url(/assets/fonts/lora.woff) format("woff"); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: "BMN Serif"; src: url(/assets/fonts/lora.woff) format("woff"); font-weight: 400 700; font-display: swap; }
 @font-face { font-family: "Inter"; src: url(/assets/fonts/inter-400.woff) format("woff"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "Inter"; src: url(/assets/fonts/inter-600.woff) format("woff"); font-weight: 600; font-display: swap; }
 :root { --night: #16112f; --night2: #2c2366; --ink: #1b1540; --text: #2e2a45; --muted: #686382; --gold: #c9a24a; --gold2: #e6c77a; --bg: #f5f2ea; --line: #e4ddcd; --ok: #1d6b46; --bad: #b42318; --warn: #8a5a00; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 400 15px/1.55 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
-h1, h2, h3 { font-family: "Lora", Georgia, serif; color: var(--ink); line-height: 1.2; margin: 0 0 .6em; font-weight: 600; }
+h1, h2, h3 { font-family: "BMN Serif", Georgia, serif; color: var(--ink); line-height: 1.2; margin: 0 0 .6em; font-weight: 600; }
 h1 { font-size: 1.9rem; } h2 { font-size: 1.25rem; } h3 { font-size: 1.05rem; margin-top: 1.2em; }
 a { color: var(--night2); }
 :focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
@@ -36,7 +36,7 @@ main { padding: 28px max(16px, calc(50% - 600px)) 80px; outline: none; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
 .stat { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 2px; }
-.stat strong { font: 600 1.9rem/1.1 "Lora", serif; color: var(--ink); }
+.stat strong { font: 600 1.9rem/1.1 "BMN Serif", serif; color: var(--ink); }
 .stat small { color: var(--muted); }
 .head-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .head-row h1 { margin: 0; }
