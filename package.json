@@ -1,0 +1,21 @@
+{
+  "name": "book-a-medium-night",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "SETUP_CODE": {
+        "description": "Make up any phrase of 8 or more characters (for example three random words). You type it once at /admin/setup/ to create your admin login. Keep it private."
+      },
+      "KV": {
+        "description": "Storage for venues, members and settings. Leave as \"Create new\"."
+      }
+    }
+  }
+}

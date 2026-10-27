@@ -1,0 +1,20 @@
+{
+  // Book a Medium Night: website, members' portal and admin console
+  "name": "book-a-medium-night",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "none",
+    "html_handling": "none"
+  },
+  "kv_namespaces": [
+    { "binding": "KV", "id": "535a3c119d233c766cb7c4d0f8a33a1c" }
+  ],
+  // once a day: delete old venue listings, unpaid/lapsed accounts and old payment records (data minimisation)
+  "triggers": { "crons": ["17 3 * * *"] },
+  "observability": { "enabled": true }
+}
