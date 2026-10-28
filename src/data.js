@@ -129,7 +129,8 @@ export function checkMedium(f, { forUpdate = false } = {}) {
   }
   return { value: m, errors: e };
 }
-const mSummary = m => ({ id: m.id, name: m.name, email: m.email, town: m.town || '', postcode: m.postcode, until: m.until || '', createdAt: m.createdAt, lastLoginAt: m.lastLoginAt || '', demo: !!m.demo });
+const mSummary = m => { const pr = m.profile || {}; return { id: m.id, name: m.name, email: m.email, town: m.town || '', postcode: m.postcode, until: m.until || '', createdAt: m.createdAt, lastLoginAt: m.lastLoginAt || '', demo: !!m.demo,
+  pub: !!(pr.on && !pr.hidden), hidden: !!pr.hidden, stage: pr.stageName || '', areas: pr.areas || '', blurb: String(pr.bio || '').slice(0, 220), photoV: pr.photoV || 0, lat: m.lat ?? null, lng: m.lng ?? null, radius: m.radius }; };
 export async function mediumIndex(env) { return (await env.KV.get('midx', 'json')) || []; }
 export async function getMedium(env, id) { return /^[a-z0-9]{8,24}$/.test(String(id)) ? env.KV.get('medium:' + id, 'json') : null; }
 export async function mediumByEmail(env, email) {
@@ -148,6 +149,8 @@ export async function setMediumEmail(env, m, oldEmail) {
 }
 export async function deleteMedium(env, m) {
   await env.KV.delete('medium:' + m.id);
+  await env.KV.delete('photo:' + m.id);
+  let cursor; do { const r = await env.KV.list({ prefix: 'enq:' + m.id + ':', cursor }); for (const k of r.keys) await env.KV.delete(k.name); cursor = r.list_complete ? null : r.cursor; } while (cursor);
   await env.KV.delete('memail:' + await sha256hex(m.email));
   await env.KV.put('midx', JSON.stringify((await mediumIndex(env)).filter(x => x.id !== m.id)));
 }
@@ -177,7 +180,7 @@ export async function listPayments(env) {
 
 /* ---------------- daily clean-up (data minimisation) ---------------- */
 export async function tidy(env) {
-  const today = todayUK(), now = Date.now(), done = { venues: 0, unpaid: 0, lapsed: 0, payments: 0 };
+  const today = todayUK(), now = Date.now(), done = { venues: 0, unpaid: 0, lapsed: 0, payments: 0, enquiries: 0 };
   // venues: remove 90 days after their last listed date
   for (const v of await venueIndex(env)) {
     const last = (v.dates || []).slice(-1)[0] || (v.createdAt || '').slice(0, 10);
@@ -190,6 +193,8 @@ export async function tidy(env) {
     const lapsed = m.until && addMonths(m.until, 24) < today;
     if (neverPaid || lapsed) { await deleteMedium(env, m); neverPaid ? done.unpaid++ : done.lapsed++; }
   }
+  // booking enquiries sent to mediums: deleted after 12 months
+  let ec; do { const r = await env.KV.list({ prefix: 'enq:', cursor: ec }); for (const k of r.keys) if (k.metadata && k.metadata.at && now - Date.parse(k.metadata.at) > 365 * 86400000) { await env.KV.delete(k.name); done.enquiries = (done.enquiries || 0) + 1; } ec = r.list_complete ? null : r.cursor; } while (ec);
   // payment records: kept 6 years for tax records, then deleted
   for (const p of await listPayments(env)) if (p.at && now - Date.parse(p.at) > 6 * 366 * 86400000) { await env.KV.delete('pay:' + p.id); done.payments++; }
   return done;
@@ -218,8 +223,20 @@ export async function createDemo(env) {
   const m = { id: newId(), name: 'Demo Medium', email: 'demo-medium@example.com', address: '1 Example Street, Stoke-on-Trent', postcode: 'ST1 1AA', phone: '07700900100', radius: 30,
     town: 'Stoke-on-Trent', lat: 53.0246, lng: -2.1790, hash: await hashPassword(password), ver: 1, until: addMonths(today, 12), memberSince: today,
     createdAt: now, consentAt: now, termsVersion: TERMS_VERSION, demo: true };
+  m.profile = { on: true, stageName: 'Demo Medium', areas: 'Staffordshire and Cheshire', bio: 'This is a demo profile. A real medium would introduce themselves here: the kind of evenings they run, how long they have been performing, and what an audience can expect on the night.', website: '', facebook: '', emailAlerts: false, photoV: 0, consentAt: now };
   await putMedium(env, m); await setMediumEmail(env, m);
-  const u = { ...m, id: newId(), name: 'Demo Unpaid Medium', email: 'demo-unpaid@example.com', until: '', memberSince: '' };
+  await env.KV.put(`enq:${m.id}:${String(9999999999999 - Date.now()).padStart(13, '0')}-${randomHex(4)}`, JSON.stringify({ venueName: 'The Crown & Anchor (demo)', contactName: 'Sam Demo', phone: '01632960101', email: 'crown-demo@example.com', postcode: 'ST1 1AA', dates: [dayPlus(24)], nightType: 'split', message: 'This is a demo enquiry. We have a function room for about 60 people and would love a medium night on a Friday.', at: now, consentAt: now }), { metadata: { at: now, venue: 'The Crown & Anchor (demo)', read: 0 } });
+  const extras = [
+    { name: 'Demo Psychic Two', stage: 'Luna (demo)', postcode: 'ST16 1AA', town: 'Stafford', lat: 52.8064, lng: -2.1170, radius: 40, areas: 'Stafford, Cannock and Lichfield', bio: 'Demo profile. Evidential medium offering relaxed evenings of spirit communication with plenty of humour along the way.' },
+    { name: 'Demo Psychic Three', stage: 'Arthur Wells (demo)', postcode: 'CW1 1AA', town: 'Cheshire East', lat: 53.0979, lng: -2.4416, radius: 25, areas: 'Crewe, Nantwich and Sandbach', bio: 'Demo profile. Psychic medium with years of experience running pub and club evenings across Cheshire.' }
+  ];
+  for (const x of extras) {
+    const e = { id: newId(), name: x.name, email: `demo-${randomHex(4)}@example.com`, address: 'Example address', postcode: x.postcode, phone: '07700900199', radius: x.radius, town: x.town, lat: x.lat, lng: x.lng,
+      hash: await hashPassword(randomHex(16)), ver: 1, until: addMonths(today, 12), memberSince: today, createdAt: now, consentAt: now, termsVersion: TERMS_VERSION, demo: true,
+      profile: { on: true, stageName: x.stage, areas: x.areas, bio: x.bio, website: '', facebook: '', emailAlerts: false, photoV: 0, consentAt: now } };
+    await putMedium(env, e); await setMediumEmail(env, e);
+  }
+  const u = { ...m, id: newId(), name: 'Demo Unpaid Medium', email: 'demo-unpaid@example.com', until: '', memberSince: '', profile: undefined };
   await putMedium(env, u); await setMediumEmail(env, u);
   await env.KV.put('demoinfo', JSON.stringify({ createdAt: now }));
   return { email: m.email, unpaidEmail: u.email, password, venues };

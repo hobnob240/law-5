@@ -5,6 +5,7 @@ Website, members' portal and admin console for Book a Medium Night, built on Clo
 - Venues register for free. Each listing waits for admin approval (you can turn this off in Settings).
 - Mediums create an account and pay £100 for 12 months through Stripe Checkout. It's a single payment with no automatic renewal.
 - Active members can see venues within their travel radius, along with the venues' contact details.
+- Members can publish an opt-in public profile. Venues find mediums by postcode on "Find a medium" and send enquiries, which arrive in the member's portal.
 - The admin console is at `/admin/`. Each partner gets their own login.
 
 ## Deploy
@@ -19,6 +20,7 @@ Optional secrets, which you add later in Cloudflare under Settings → Variables
 
 - `STRIPE_SECRET_KEY`: your Stripe secret key, for card payments.
 - `STRIPE_WEBHOOK_SECRET`: the signing secret for the webhook `https://<your-site>/stripe/webhook`, which listens for the event `checkout.session.completed`.
+- `RESEND_API_KEY` and `EMAIL_FROM`: optional email alerts that tell mediums when a venue sends them an enquiry (resend.com).
 
 No keys or passwords are stored in this repository or sent to browsers.
 
@@ -29,5 +31,6 @@ No keys or passwords are stored in this repository or sent to browsers.
   - venues 3 months after their last date,
   - unpaid accounts after 30 days,
   - lapsed members 24 months after their membership ends,
+  - booking enquiries after 12 months,
   - payment records after 6 years.
 - **Members' rights:** members can download or delete their own data. Venues can edit or delete their listing with their private link.

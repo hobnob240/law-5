@@ -50,6 +50,29 @@
       } else { box.querySelectorAll('.err').forEach(function (e) { e.remove(); }); el.removeAttribute('aria-invalid'); box.classList.remove('has-err'); }
     });
   });
+  // profile photo: resize in the browser (also drops hidden location data), then upload
+  var pf = document.getElementById('photo-file'), perr = document.getElementById('photo-err');
+  if (pf) pf.addEventListener('change', function () {
+    var file = pf.files && pf.files[0]; if (!file) return;
+    var fail = function (m) { perr.textContent = m; perr.hidden = false; };
+    perr.hidden = true;
+    if (!/^image\//.test(file.type)) return fail('Please choose a photo (JPEG or PNG).');
+    if (file.size > 20 * 1024 * 1024) return fail('That photo is too large. Please choose one under 20MB.');
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onerror = function () { URL.revokeObjectURL(url); fail('We couldn\'t read that photo. Please try a JPEG or PNG.'); };
+    img.onload = function () {
+      var size = 640, s = Math.min(img.naturalWidth, img.naturalHeight), sx = (img.naturalWidth - s) / 2, sy = (img.naturalHeight - s) / 2;
+      var c = document.createElement('canvas'); c.width = c.height = Math.min(size, s);
+      c.getContext('2d').drawImage(img, sx, sy, s, s, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      c.toBlob(function (blob) {
+        if (!blob) return fail('We couldn\'t process that photo.');
+        fetch('/members/profile/photo', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg' }, body: blob })
+          .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Upload failed'); location.href = '/members/profile/?saved=1'; }); })
+          .catch(function (e) { fail(e.message || 'Upload failed. Please try again.'); });
+      }, 'image/jpeg', 0.85);
+    };
+    img.src = url;
+  });
   // stop double submits
   document.querySelectorAll('form').forEach(function (f) {
     f.addEventListener('submit', function () {

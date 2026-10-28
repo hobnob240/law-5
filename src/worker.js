@@ -3,7 +3,7 @@
 import {
   PUBLIC_CSP, ADMIN_CSP, esc, clean, EMAIL_RE, todayUK, json, secure, html, redirect, sameOrigin, readJson, readForm,
   prettyPhone, randomHex, sha256hex, safeEqual, hashPassword, verifyPassword, passwordProblem, createSession, getSession, endSession,
-  limit, formToken, checkToken, log, lookupPostcode, miles
+  limit, formToken, checkToken, log, lookupPostcode, miles, normPostcode
 } from './lib.js';
 import {
   TERMS_VERSION, NIGHT_TYPES, validSettings, getSettings, isActive, addMonths, checkVenue, venueIndex, getVenue, putVenue,
@@ -12,9 +12,12 @@ import {
 } from './data.js';
 import { stripeReady, stripeMode, createCheckout, getCheckout, verifyWebhook } from './stripe.js';
 import * as P from './pages.js';
+import * as PP from './profilepages.js';
+import { isPublic, displayName, checkProfile, checkEnquiry, addEnquiry, getEnquiries, unreadCount, markRead, deleteEnquiry, stripJpeg } from './profiles.js';
+import { emailReady, sendEmail } from './email.js';
 
 const PAGES = new Set(['/', '/about/', '/venues/', '/venues/register/', '/mediums/', '/mediums/join/', '/members/', '/members/login/',
-  '/members/account/', '/members/paid/', '/privacy/', '/terms/', '/admin/', '/admin/login/', '/admin/setup/']);
+  '/members/account/', '/members/paid/', '/mediums/find/', '/members/profile/', '/members/enquiries/', '/privacy/', '/terms/', '/admin/', '/admin/login/', '/admin/setup/']);
 
 export default {
   async fetch(req, env, ctx) {
@@ -28,7 +31,7 @@ export default {
     }
   },
   async scheduled(event, env, ctx) {
-    ctx.waitUntil((async () => { const r = await tidy(env); if (r.venues || r.unpaid || r.lapsed || r.payments) await log(env, null, 'system', `Automatic clean-up: removed ${r.venues} old venue(s), ${r.unpaid} unpaid account(s), ${r.lapsed} lapsed account(s), ${r.payments} old payment record(s)`); })());
+    ctx.waitUntil((async () => { const r = await tidy(env); if (r.venues || r.unpaid || r.lapsed || r.payments || r.enquiries) await log(env, null, 'system', `Automatic clean-up: removed ${r.venues} old venue(s), ${r.unpaid} unpaid account(s), ${r.lapsed} lapsed account(s), ${r.enquiries} old enquiry(ies), ${r.payments} old payment record(s)`); })());
   }
 };
 
@@ -82,10 +85,16 @@ async function route(req, env, ctx, url) {
     case '/members/account/data': return myData(env, url, m);
     case '/members/checkout/': return checkout(req, env, url, method, S, m);
     case '/members/paid/': return paid(req, env, url, S, m);
+    case '/mediums/find/': return findMediums(req, env, url, method, S, page);
+    case '/members/profile/': return myProfile(req, env, url, method, S, page, m);
+    case '/members/profile/photo': return uploadPhoto(req, env, method, m);
+    case '/members/enquiries/': return myEnquiries(req, env, url, method, S, page, m);
   }
   let mm;
   if ((mm = /^\/venues\/manage\/([a-z0-9]{8,24}\.[a-f0-9]{48})$/.exec(path))) return venueManage(req, env, url, method, S, page, mm[1]);
   if ((mm = /^\/members\/venues\/([a-z0-9]{8,24})$/.exec(path))) return venueDetail(env, url, S, page, m, mm[1]);
+  if ((mm = /^\/mediums\/m\/([a-z0-9]{8,24})$/.exec(path))) return mediumProfile(req, env, url, method, S, page, mm[1]);
+  if ((mm = /^\/media\/m\/([a-z0-9]{8,24})\.jpg$/.exec(path))) return photo(req, env, url, m, mm[1]);
   if ((mm = /^\/members\/reset\/([a-f0-9]{64})$/.exec(path))) return memberReset(req, env, url, method, S, page, mm[1]);
   if (path.startsWith('/venues/manage/')) {
     const rl = await limit(env, req, 'manage', 30, 3600); await rl.hit();
@@ -258,7 +267,7 @@ async function portal(req, env, url, method, S, page, m) {
   const venues = isActive(m) ? upcomingFor(m, all, showAll) : [];
   // before paying: show how many venues are within reach (town and date only, no names or contact details)
   const preview = isActive(m) ? [] : upcomingFor(m, all, false).map(v => ({ town: v.town, distance: v.distance, next: v.upcoming[0], count: v.upcoming.length }));
-  return page({ title: `Members' portal | ${S.siteName}`, noindex: true, body: P.portalPage(S, { medium: m, venues, preview, showAll, notice, error, stripe: stripeReady(env) }) }, { noindex: true });
+  return page({ title: `Members' portal | ${S.siteName}`, noindex: true, body: P.portalPage(S, { medium: m, venues, preview, showAll, notice, error, stripe: stripeReady(env), unread: await unreadCount(env, m.id) }) }, { noindex: true });
 }
 
 async function venueDetail(env, url, S, page, m, id) {
@@ -274,7 +283,7 @@ const mediumValues = m => ({ name: m.name, email: m.email, address: m.address, p
 async function account(req, env, url, method, S, page, m) {
   if (!m) return redirect('/members/login/');
   const title = `My account | ${S.siteName}`;
-  const show = (o, status = 200, cookies = []) => page({ title, noindex: true, body: P.accountPage(S, { medium: m, values: mediumValues(m), ...o }) }, { noindex: true, status, cookies });
+  const show = async (o, status = 200, cookies = []) => page({ title, noindex: true, body: P.accountPage(S, { medium: m, values: mediumValues(m), unread: await unreadCount(env, m.id), ...o }) }, { noindex: true, status, cookies });
   if (method === 'GET') return show({ saved: ['details', 'password'].includes(url.searchParams.get('saved')) ? url.searchParams.get('saved') : '' });
   if (method !== 'POST') return notAllowed();
   const f = (await readForm(req)) || {};
@@ -315,7 +324,8 @@ async function myData(env, url, m) {
   if (!m) return redirect('/members/login/');
   const { hash, ver, ...mine } = m;
   const payments = (await listPayments(env)).filter(p => p.mediumId === m.id).map(({ id, mediumId, ...p }) => p);
-  const body = JSON.stringify({ exportedAt: new Date().toISOString(), account: mine, payments, note: 'Location (lat/lng/town) is an approximate point for your postcode, used to work out distances to venues.' }, null, 2);
+  const enquiries = await getEnquiries(env, m.id);
+  const body = JSON.stringify({ exportedAt: new Date().toISOString(), account: mine, payments, enquiriesReceived: enquiries, note: 'Location (lat/lng/town) is an approximate point for your postcode, used to work out distances to venues.' }, null, 2);
   return new Response(body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="my-data-${todayUK()}.json"`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 }
 
@@ -366,6 +376,127 @@ async function stripeWebhook(req, env) {
     }
   }
   return json({ received: true });
+}
+
+/* ================= medium profiles + enquiries ================= */
+function publicMediums(index) {
+  const today = todayUK();
+  return index.filter(x => x.pub && x.until && x.until >= today);
+}
+async function findMediums(req, env, url, method, S, page) {
+  if (method !== 'GET') return notAllowed();
+  const title = `Find a medium | ${S.siteName}`, description = 'Find psychics and mediums who travel to your venue and send them a free booking enquiry.';
+  let list = publicMediums(await mediumIndex(env)), place = '', error = '';
+  const pcRaw = clean(url.searchParams.get('postcode'), 12);
+  if (pcRaw) {
+    const pc = normPostcode(pcRaw);
+    const rl = await limit(env, req, 'find', 60, 3600);
+    if (!pc) error = 'Please enter a full UK postcode, like ST1 1AA.';
+    else if (rl.blocked) error = 'Too many searches. Please try again later.';
+    else {
+      await rl.hit();
+      const g = await lookupPostcode(pc);
+      if (!g) error = 'We couldn\'t find that postcode. Please check it and try again.';
+      else {
+        place = g.town || pc;
+        list = list.map(x => ({ ...x, distance: miles(g, x) })).filter(x => x.distance != null && x.distance <= x.radius).sort((a, b) => a.distance - b.distance);
+      }
+    }
+  }
+  if (!place) list = list.slice().sort((a, b) => (a.stage || a.name).localeCompare(b.stage || b.name));
+  const results = list.map(x => ({ id: x.id, stage: x.stage || 'Medium', town: x.town, areas: x.areas, blurb: x.blurb, photoV: x.photoV, distance: place ? x.distance : null, demo: x.demo }));
+  return page({ title, description, body: PP.findPage(S, { results, place, postcode: pcRaw, error }) }, { cache: 'no-cache' });
+}
+
+async function mediumProfile(req, env, url, method, S, page, id) {
+  const m = await getMedium(env, id);
+  if (!isPublic(m)) return notFound(env, url, S);
+  const name = displayName(m);
+  const title = `${name}, psychic medium | ${S.siteName}`, description = `${name} travels up to ${m.radius} miles from ${m.town || 'their home town'}. Send a free booking enquiry.`;
+  if (method === 'GET') return page({ title, description, body: PP.profilePage(S, { medium: m, token: await formToken(env) }) }, { cache: 'no-store' });
+  if (method !== 'POST') return notAllowed();
+  const f = await readForm(req);
+  const again = async errors => page({ title, description, noindex: true, body: PP.profilePage(S, { medium: m, token: await formToken(env), form: { type: 'enq', values: f || {}, errors } }) }, { status: 400 });
+  const sp = await spamCheck(env, f);
+  if (sp === 'spam') return redirect('/mediums/find/');
+  if (sp) return again({ form: sp });
+  const rl = await limit(env, req, 'enquiry', 6, 3600);
+  if (rl.blocked) return again({ form: 'Too many enquiries from this connection. Please try again in an hour.' });
+  const dayKey = `enqday:${m.id}:${todayUK()}`, today = parseInt(await env.KV.get(dayKey), 10) || 0;
+  if (today >= 30) return again({ form: 'This medium has received a lot of enquiries today. Please try again tomorrow.' });
+  const { value, errors } = checkEnquiry(f);
+  if (Object.keys(errors).length) return again(errors);
+  await rl.hit(); await markTokenUsed(env, f.t);
+  await env.KV.put(dayKey, String(today + 1), { expirationTtl: 2 * 86400 });
+  await addEnquiry(env, m.id, { ...value, consentAt: new Date().toISOString() });
+  await log(env, req, 'public', `Booking enquiry sent to ${name}`);
+  if (m.profile.emailAlerts !== false && !m.demo) {
+    await sendEmail(env, { to: m.email, subject: `New booking enquiry from ${value.venueName}`,
+      text: `Hello ${m.name.split(' ')[0]},\n\n${value.venueName} has sent you a booking enquiry on ${S.siteName}.\n\nLog in to see their details and get in touch:\n${url.origin}/members/enquiries/\n\nYou're receiving this because you turned on enquiry emails in your profile. You can turn them off there at any time.\n\n${S.siteName}` });
+  }
+  return page({ title: `Enquiry sent | ${S.siteName}`, noindex: true, body: PP.enquirySent(S, { name }) }, { noindex: true });
+}
+
+async function photo(req, env, url, viewer, id) {
+  const m = await getMedium(env, id);
+  const own = viewer && viewer.id === id;
+  if (!m || !(isPublic(m) || own || await currentAdmin(req, env))) return new Response('Not found', { status: 404 });
+  const b = await env.KV.get('photo:' + id, 'arrayBuffer');
+  if (!b) return new Response('Not found', { status: 404 });
+  return secure(new Response(b, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': isPublic(m) && url.searchParams.get('v') ? 'public, max-age=86400' : 'private, no-store' } }), url);
+}
+
+async function uploadPhoto(req, env, method, m) {
+  if (method !== 'POST') return notAllowed();
+  if (!m) return json({ error: 'Please log in again.' }, 401);
+  if ((req.headers.get('content-type') || '') !== 'image/jpeg') return json({ error: 'Please choose a JPEG or PNG photo.' }, 415);
+  const rl = await limit(env, req, 'photo', 20, 3600);
+  if (rl.blocked) return json({ error: 'Too many uploads. Please try again later.' }, 429);
+  const buf = new Uint8Array(await req.arrayBuffer());
+  if (buf.length > 600 * 1024) return json({ error: 'That photo is too large. Please choose a smaller one.' }, 413);
+  const clean = stripJpeg(buf);
+  if (!clean) return json({ error: 'That file isn\'t a photo we can use. Please choose a JPEG or PNG.' }, 400);
+  await rl.hit();
+  await env.KV.put('photo:' + m.id, clean);
+  m.profile = { ...(m.profile || {}), photoV: Date.now() };
+  await putMedium(env, m);
+  return json({ ok: true });
+}
+
+const profileValues = p => ({ on: p.on ? 'yes' : '', stageName: p.stageName || '', areas: p.areas || '', bio: p.bio || '', website: p.website || '', facebook: p.facebook || '', emailAlerts: p.emailAlerts === false ? '' : 'yes' });
+
+async function myProfile(req, env, url, method, S, page, m) {
+  if (!m) return redirect('/members/login/');
+  const title = `My profile | ${S.siteName}`;
+  const show = async (o, status = 200) => page({ title, noindex: true, body: PP.myProfilePage(S, { medium: m, values: profileValues(m.profile || {}), active: isActive(m), emailOn: emailReady(env), unread: await unreadCount(env, m.id), ...o }) }, { noindex: true, status });
+  if (method === 'GET') return show({ saved: url.searchParams.get('saved') === '1' });
+  if (method !== 'POST') return notAllowed();
+  const f = (await readForm(req)) || {};
+  if (f.action === 'removephoto') {
+    await env.KV.delete('photo:' + m.id);
+    m.profile = { ...(m.profile || {}), photoV: 0 }; await putMedium(env, m);
+    return redirect('/members/profile/?saved=1');
+  }
+  const { value, errors } = checkProfile(f);
+  if (Object.keys(errors).length) return show({ form: { type: 'prof', values: f, errors } }, 400);
+  const wasOn = !!(m.profile && m.profile.on);
+  m.profile = { ...(m.profile || {}), ...value, consentAt: value.on && !wasOn ? new Date().toISOString() : (m.profile && m.profile.consentAt) || '' };
+  await putMedium(env, m);
+  if (value.on !== wasOn) await log(env, req, 'member', `${m.name} ${value.on ? 'published' : 'unpublished'} their profile`);
+  return redirect('/members/profile/?saved=1');
+}
+
+async function myEnquiries(req, env, url, method, S, page, m) {
+  if (!m) return redirect('/members/login/');
+  if (method === 'POST') {
+    const f = (await readForm(req)) || {};
+    if (f.action === 'read') await markRead(env, m.id, String(f.id || ''));
+    if (f.action === 'delete') await deleteEnquiry(env, m.id, String(f.id || ''));
+    return redirect('/members/enquiries/' + (f.action === 'delete' ? '?deleted=1' : ''));
+  }
+  if (method !== 'GET') return notAllowed();
+  const enquiries = await getEnquiries(env, m.id);
+  return page({ title: `Enquiries | ${S.siteName}`, noindex: true, body: PP.enquiriesPage(S, { enquiries, unread: enquiries.filter(e => !e.read).length, public: isPublic(m), notice: url.searchParams.get('deleted') === '1' ? 'Enquiry deleted.' : '' }) }, { noindex: true });
 }
 
 /* ================= admin ================= */
@@ -494,13 +625,15 @@ async function api(req, env, url, method, a, p) {
 
   /* mediums */
   if (p === 'mediums' && method === 'GET') return json({ mediums: await mediumIndex(env), today });
-  if ((mm = /^mediums\/([a-z0-9]{8,24})(?:\/(payment|deactivate|reset))?$/.exec(p))) {
+  if ((mm = /^mediums\/([a-z0-9]{8,24})(?:\/(payment|deactivate|reset|profile))?$/.exec(p))) {
     const m = await getMedium(env, mm[1]);
     if (!m) return json({ error: 'That account no longer exists.' }, 404);
     const action = mm[2];
     if (!action && method === 'GET') {
       const payments = (await listPayments(env)).filter(x => x.mediumId === m.id);
-      return json({ medium: pick(m, ['id', 'name', 'email', 'address', 'postcode', 'town', 'phone', 'radius', 'until', 'memberSince', 'createdAt', 'lastLoginAt', 'termsVersion']), payments });
+      const pr = m.profile || {};
+      return json({ medium: pick(m, ['id', 'name', 'email', 'address', 'postcode', 'town', 'phone', 'radius', 'until', 'memberSince', 'createdAt', 'lastLoginAt', 'termsVersion']), payments,
+        profile: { on: !!pr.on, hidden: !!pr.hidden, stageName: pr.stageName || '', public: isPublic(m), url: url.origin + '/mediums/m/' + m.id, enquiries: (await getEnquiries(env, m.id)).length } });
     }
     if (!action && method === 'PUT') {
       const { value, errors } = checkMedium(body, { forUpdate: true });
@@ -533,6 +666,11 @@ async function api(req, env, url, method, a, p) {
       await log(env, req, a.user, `Ended membership for ${m.name}`);
       return json({ ok: true });
     }
+    if (action === 'profile' && method === 'PUT') {
+      m.profile = { ...(m.profile || {}), hidden: !!body.hidden }; await putMedium(env, m);
+      await log(env, req, a.user, `${body.hidden ? 'Hid' : 'Unhid'} the public profile of ${m.name}`);
+      return json({ ok: true });
+    }
     if (action === 'reset' && method === 'POST') {
       const token = randomHex(32);
       await env.KV.put('mreset:' + await sha256hex(token), m.id, { expirationTtl: 86400 });
@@ -549,7 +687,7 @@ async function api(req, env, url, method, a, p) {
   }
 
   /* settings */
-  if (p === 'settings' && method === 'GET') return json({ settings: await getSettings(env), stripe: { ready: stripeReady(env), mode: stripeReady(env) ? stripeMode(env) : '', webhook: !!env.STRIPE_WEBHOOK_SECRET }, webhookUrl: url.origin + '/stripe/webhook' });
+  if (p === 'settings' && method === 'GET') return json({ settings: await getSettings(env), stripe: { ready: stripeReady(env), mode: stripeReady(env) ? stripeMode(env) : '', webhook: !!env.STRIPE_WEBHOOK_SECRET }, email: emailReady(env), webhookUrl: url.origin + '/stripe/webhook' });
   if (p === 'settings' && method === 'PUT') {
     const { value, errors } = validSettings(body);
     if (errors.length) return json({ error: errors[0] }, 400);

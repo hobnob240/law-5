@@ -172,7 +172,7 @@ async function mediums() {
 }
 async function openMedium(id) {
   view(h('p', { class: 'muted' }, 'Loading…'));
-  const { medium: m, payments } = await api('GET', 'mediums/' + id);
+  const { medium: m, payments, profile } = await api('GET', 'mediums/' + id);
   const f = { name: m.name, email: m.email, address: m.address, postcode: m.postcode, phone: m.phone, radius: m.radius };
   const inp = (k, type = 'text') => h('input', { type, value: f[k] ?? '', oninput: e => { f[k] = e.target.value; } });
   const pay = { amount: '100', method: 'bank', note: '' };
@@ -203,6 +203,10 @@ async function openMedium(id) {
           field('Travel radius (miles)', inp('radius', 'number')),
           h('button', { type: 'button', class: 'btn btn-primary', onclick: async e => { if (await act(e.target, () => api('PUT', 'mediums/' + m.id, f), 'Saved')) openMedium(m.id); } }, 'Save details'),
           h('dl', { class: 'dl' }, h('dt', {}, 'Phone'), h('dd', {}, h('a', { href: 'tel:+44' + String(m.phone).slice(1) }, pretty(m.phone))), h('dt', {}, 'Signed up'), h('dd', {}, when(m.createdAt)), h('dt', {}, 'Last login'), h('dd', {}, m.lastLoginAt ? when(m.lastLoginAt) : 'Never'), h('dt', {}, 'Agreed terms'), h('dd', {}, m.termsVersion || ''))),
+        h('section', { class: 'card' }, h('h2', {}, 'Public profile'),
+          h('p', {}, profile.public ? ['Live as ', h('strong', {}, profile.stageName), '. ', h('a', { href: profile.url, target: '_blank', rel: 'noopener' }, 'View profile')] : profile.hidden ? 'Hidden by admin.' : profile.on ? 'Turned on, but not showing (membership not active).' : 'Not published.'),
+          h('p', { class: 'muted' }, `${profile.enquiries} booking enquir${profile.enquiries === 1 ? 'y' : 'ies'} in their inbox.`),
+          profile.on ? h('button', { type: 'button', class: profile.hidden ? 'btn' : 'btn btn-danger', onclick: async e => { if (await act(e.target, () => api('PUT', `mediums/${m.id}/profile`, { hidden: !profile.hidden }), profile.hidden ? 'Profile shown' : 'Profile hidden')) openMedium(m.id); } }, profile.hidden ? 'Show profile again' : 'Hide profile') : null),
         h('section', { class: 'card' }, h('h2', {}, 'Password reset'),
           h('p', { class: 'muted' }, 'Creates a one-time link that works for 24 hours. Send it to them yourself, by email or text. Never ask a member for their password.'),
           h('button', { type: 'button', class: 'btn', onclick: async e => { const r = await act(e.target, () => api('POST', `mediums/${m.id}/reset`, {})); if (r) linkOut.replaceChildren(h('div', { class: 'copy' }, h('input', { type: 'text', readonly: true, value: r.link, 'aria-label': 'Reset link', onclick: ev => ev.target.select() }), h('button', { type: 'button', class: 'btn', onclick: ev => { navigator.clipboard && navigator.clipboard.writeText(r.link).then(() => toast('Link copied')); } }, 'Copy'))); } }, 'Create reset link'),
@@ -248,6 +252,14 @@ async function settings() {
           field('Bank details for manual payments (optional)', inp('bankDetails', { area: true, rows: 3, ph: 'Account name, sort code, account number' }), 'Only shown to logged-in mediums who haven\'t paid, while card payments aren\'t connected.')),
         h('button', { type: 'button', class: 'btn btn-primary', onclick: e => save(e.target) }, 'Save settings')),
       h('div', {}, demoCard(d.demo),
+      h('section', { class: 'card' }, h('h2', {}, 'Email alerts (optional)'),
+        h('dl', { class: 'dl' }, h('dt', {}, 'Status'), h('dd', {}, d.email ? pill('Connected', 'ok') : pill('Not connected', 'off'))),
+        h('p', { class: 'muted' }, 'When connected, mediums get an email when a venue sends them an enquiry. Without it, enquiries still arrive in their portal.'),
+        h('ol', { class: 'steps' },
+          h('li', {}, 'Sign up free at resend.com and add your domain (for example bookamediumnight.co.uk) under Domains, then follow its DNS steps.'),
+          h('li', {}, 'In Resend, go to API Keys and create a key with "Sending access".'),
+          h('li', {}, 'In Cloudflare: Workers & Pages → book-a-medium-night → Settings → Variables and Secrets. Add a Secret named RESEND_API_KEY with that key.'),
+          h('li', {}, 'Add another Secret named EMAIL_FROM, for example: Book a Medium Night <alerts@bookamediumnight.co.uk>'))),
       h('section', { class: 'card' }, h('h2', {}, 'Card payments (Stripe)'),
         h('dl', { class: 'dl' },
           h('dt', {}, 'Secret key'), h('dd', {}, d.stripe.ready ? pill(d.stripe.mode === 'live' ? 'Connected (live)' : 'Connected (test mode)', d.stripe.mode === 'live' ? 'ok' : 'warn') : pill('Not connected', 'off')),
@@ -272,7 +284,7 @@ function demoCard(info) {
     h('p', {}, h('strong', {}, 'Venue private links'), ' (what a venue uses to change or delete its listing):'),
     h('ul', { class: 'list' }, r.venues.map(v => h('li', {}, h('a', { href: v.link, target: '_blank', rel: 'noopener' }, v.name))))));
   return h('section', { class: 'card' }, h('h2', {}, 'Demo data'),
-    h('p', { class: 'muted' }, 'Adds 4 demo venues near Stoke-on-Trent and 2 demo medium logins (one paid, one unpaid) so you can see the site as a medium or a venue. They are labelled "demo" and use fake phone numbers and example.com emails. Remove them before you launch.'),
+    h('p', { class: 'muted' }, 'Adds 4 demo venues near Stoke-on-Trent, 2 demo medium logins (one paid with a public profile and a sample enquiry, one unpaid) and 2 extra demo profiles on Find a medium, so you can see the site as a medium or a venue. They are labelled "demo" and use fake phone numbers and example.com emails. Remove them before you launch.'),
     info ? h('p', {}, pill('Demo data is on', 'warn'), ' created ' + when(info.createdAt)) : null,
     h('div', { class: 'actions' },
       h('button', { type: 'button', class: 'btn btn-primary', onclick: async e => { const r = await act(e.target, () => api('POST', 'demo', {}), 'Demo data created'); if (r) show(r); } }, info ? 'Recreate demo data' : 'Create demo data'),

@@ -19,8 +19,13 @@ const I = {
 };
 
 /* ---------------- shell ---------------- */
+function navOn(path, h) {
+  if (h === '/mediums/find/') return path.startsWith('/mediums/find/') || path.startsWith('/mediums/m/');
+  if (h === '/mediums/') return path.startsWith('/mediums/') && !path.startsWith('/mediums/find/') && !path.startsWith('/mediums/m/');
+  return path.startsWith(h);
+}
 export function shell({ S, origin, path, title, description, body, member, noindex }) {
-  const nav = [['/', 'Home'], ['/venues/', 'For venues'], ['/mediums/', 'For mediums'], ['/about/', 'About']];
+  const nav = [['/venues/', 'For venues'], ['/mediums/find/', 'Find a medium'], ['/mediums/', 'For mediums'], ['/about/', 'About']];
   return `<!DOCTYPE html>
 <html lang="en-GB">
 <head>
@@ -46,7 +51,7 @@ export function shell({ S, origin, path, title, description, body, member, noind
     <a class="brand" href="/" aria-label="${esc(S.siteName)}, home"><img src="/assets/logo.svg" alt="${esc(S.siteName)}" width="292" height="64"></a>
     <button class="menu-btn" type="button" aria-expanded="false" aria-controls="nav"><span></span><span></span><span></span><span class="sr">Menu</span></button>
     <nav id="nav" class="nav" aria-label="Main">
-      ${nav.map(([h, l]) => `<a href="${h}"${path === h || (h !== '/' && path.startsWith(h)) ? ' aria-current="page"' : ''}>${l}</a>`).join('')}
+      ${nav.map(([h, l]) => `<a href="${h}"${navOn(path, h) ? ' aria-current="page"' : ''}>${l}</a>`).join('')}
       ${member ? `<a class="nav-cta" href="/members/">${I.user}My portal</a>` : `<a class="nav-login" href="/members/login/">Member login</a><a class="nav-cta gold" href="/venues/register/">List your venue free</a>`}
     </nav>
   </div>
@@ -57,7 +62,7 @@ ${body}
 <footer class="site-foot">
   <div class="wrap foot-grid">
     <div class="foot-brand"><img src="/assets/logo-light.svg" alt="" width="292" height="64" loading="lazy"><p>Bringing venues and mediums together.</p></div>
-    <div><h2 class="foot-h">Venues</h2><ul class="foot-list"><li><a href="/venues/register/">Register your venue free</a></li><li><a href="/venues/">How it works</a></li></ul></div>
+    <div><h2 class="foot-h">Venues</h2><ul class="foot-list"><li><a href="/venues/register/">Register your venue free</a></li><li><a href="/mediums/find/">Find a medium</a></li><li><a href="/venues/">How it works</a></li></ul></div>
     <div><h2 class="foot-h">Mediums</h2><ul class="foot-list"><li><a href="/mediums/join/">Become a member</a></li><li><a href="/members/login/">Member login</a></li></ul></div>
     <div><h2 class="foot-h">About</h2><ul class="foot-list"><li><a href="/about/">Our mission</a></li><li><a href="/privacy/">Privacy notice</a></li><li><a href="/terms/">Terms</a></li>${S.contactEmail ? `<li><a href="mailto:${esc(S.contactEmail)}">Contact us</a></li>` : ''}</ul></div>
   </div>
@@ -95,6 +100,7 @@ function hero(S) {
       <a class="path" href="/venues/register/"><span class="path-ic">${I.venue}</span><span><small>Own a venue?</small><strong>Register for free</strong><em>List your dates and let mediums contact you</em></span><span class="arrow" aria-hidden="true">→</span></a>
       <a class="path gold" href="/mediums/"><span class="path-ic">${I.star}</span><span><small>Are you a medium?</small><strong>Find venues near you</strong><em>Get in touch with venues looking for you now</em></span><span class="arrow" aria-hidden="true">→</span></a>
     </div>
+    <p class="alt-link"><a href="/mediums/find/">Or browse mediums who cover your area →</a></p>
   </div>
 </section>`;
 }
@@ -115,7 +121,7 @@ export function homePage(S) {
       <h2>Host a mediumship evening, without the hassle</h2>
       <p class="big">Whether you're planning a one-off event or looking to introduce regular mediumship evenings, we're here to help. Simply register your venue, choose your preferred dates and let registered mediums discover your opportunity.</p>
       <p><strong>Register your details now and let ${esc(S.siteName)} do the rest.</strong></p>
-      <a class="btn btn-primary" href="/venues/register/">Register your venue free</a>
+      <div class="row-btns"><a class="btn btn-primary" href="/venues/register/">Register your venue free</a><a class="btn btn-ghost" href="/mediums/find/">Find a medium</a></div>
     </div>
     <ul class="feature-list">
       <li><span class="fi">${I.check}</span><div><h3>Completely free for venues</h3><p>It costs nothing to register and advertise your available dates.</p></div></li>
@@ -202,6 +208,7 @@ export function venuesPage(S) {
     <p class="eyebrow dark">Choose your type of night</p>
     <ul class="night-types">${Object.values(NIGHT_TYPES).map(t => `<li>${I.moon}<span>${esc(t)}</span></li>`).join('')}</ul>
     <a class="btn btn-primary wide" href="/venues/register/">Register your venue free</a>
+    <a class="btn btn-ghost wide mt" href="/mediums/find/">Or choose a medium yourself</a>
   </div>
 </div></section>`;
 }
@@ -386,9 +393,9 @@ export function resetPage(S, o) {
 }
 
 /* ---------------- members' portal ---------------- */
-function portalNav(path) {
-  const items = [['/members/', 'Venues'], ['/members/account/', 'My account']];
-  return `<nav class="portal-nav" aria-label="Members">${items.map(([h, l]) => `<a href="${h}"${path === h ? ' aria-current="page"' : ''}>${l}</a>`).join('')}<form method="post" action="/members/logout/"><button class="linkish" type="submit">Log out</button></form></nav>`;
+function portalNav(path, unread) {
+  const items = [['/members/', 'Venues'], ['/members/enquiries/', 'Enquiries'], ['/members/profile/', 'My profile'], ['/members/account/', 'My account']];
+  return `<nav class="portal-nav" aria-label="Members">${items.map(([h, l]) => `<a href="${h}"${path === h ? ' aria-current="page"' : ''}>${l}${h === '/members/enquiries/' && unread ? ` <span class="count" aria-label="${unread} unread">${unread}</span>` : ''}</a>`).join('')}<form method="post" action="/members/logout/"><button class="linkish" type="submit">Log out</button></form></nav>`;
 }
 function preview(o, m) {
   const p = o.preview || [];
@@ -400,7 +407,7 @@ function preview(o, m) {
 export function portalPage(S, o) {
   const m = o.medium, active = isActive(m);
   const head = `<section class="portal-head"><div class="sky small" aria-hidden="true"></div><div class="wrap"><p class="eyebrow">Members' portal</p><h1>Hello, ${esc(m.name.split(' ')[0])}</h1>
-    <p class="lede">${active ? `Your membership is active until <strong>${shortDate(m.until)}</strong>.` : m.until ? `Your membership ended on ${shortDate(m.until)}.` : 'Activate your membership to see venues looking for mediums.'}</p>${portalNav('/members/')}</div></section>`;
+    <p class="lede">${active ? `Your membership is active until <strong>${shortDate(m.until)}</strong>.` : m.until ? `Your membership ended on ${shortDate(m.until)}.` : 'Activate your membership to see venues looking for mediums.'}</p>${portalNav('/members/', o.unread)}</div></section>`;
   if (!active) {
     return `${head}<section class="band"><div class="wrap narrow">
       ${o.notice ? `<div class="form-ok" role="status">${esc(o.notice)}</div>` : ''}${o.error ? `<div class="form-err" role="alert">${esc(o.error)}</div>` : ''}
@@ -467,7 +474,7 @@ export function venueDetail(S, o) {
 }
 export function accountPage(S, o) {
   const m = o.medium, f = fs(o, 'account'), pf = fs(o, 'password');
-  return `<section class="portal-head"><div class="sky small" aria-hidden="true"></div><div class="wrap"><p class="eyebrow">Members' portal</p><h1>My account</h1>${portalNav('/members/account/')}</div></section>
+  return `<section class="portal-head"><div class="sky small" aria-hidden="true"></div><div class="wrap"><p class="eyebrow">Members' portal</p><h1>My account</h1>${portalNav('/members/account/', o.unread)}</div></section>
 <section class="band"><div class="wrap form-wrap">
   <div>
     <form class="form card" method="post" action="/members/account/" novalidate>
@@ -515,13 +522,17 @@ export function privacyPage(S) {
   <p>When you register a venue we collect the venue name, address and postcode, a contact phone number, an optional email address, your preferred dates, contact preferences, notes and the type of night you'd like. We use this to show your listing to registered mediums so they can contact you. Our lawful basis is your consent, which you give when you tick the box on the form, and our legitimate interest in running the service. You can withdraw consent at any time by deleting your listing with your private link, or by contacting us.</p>
   <h3>Mediums</h3>
   <p>When you create an account we collect your name, address, postcode, phone number, email address, how far you'll travel and a password (stored only in scrambled, "hashed" form). We use this to provide your membership, show you venues within reach and contact you about your account. Our lawful basis is the contract between us (your membership). We keep a record of membership payments to meet our legal obligations for tax and accounts.</p>
+  <h3>Medium public profiles</h3>
+  <p>Members can choose to publish a profile on "Find a medium". Only the details they enter for it (the name they perform under, areas covered, an introduction, website and social links, and an optional photo) are shown publicly, together with their town and how far they travel. Their real name, address, phone number and email are never shown. Profiles are shown only while the member's membership is active and the member can turn their profile off at any time. Our lawful basis is the member's consent. Photos are resized and any hidden location data is removed when uploaded.</p>
+  <h3>Booking enquiries</h3>
+  <p>When you send a booking enquiry to a medium, we collect your venue name, your name, phone number, and anything else you choose to add (email, postcode, dates, type of night and a message). We pass these to that medium only, so they can contact you about the booking. Our lawful basis is your consent, which you give by ticking the box on the form. Enquiries are deleted automatically after 12 months, or sooner if the medium deletes them or their account.</p>
   <h3>Payments</h3>
   <p>Card payments are handled by Stripe. We never see or store your card details. Stripe processes your payment information under its own privacy policy, and tells us whether the payment succeeded.</p>
   <h2>Who can see your information</h2>
-  <ul><li><strong>Venue details</strong> (name, address and contact details) are shown only to mediums with an active membership, and to us. Mediums who have signed up but not yet paid can see only the town, approximate distance and dates.</li><li><strong>Mediums' details</strong> are not shown to venues or other members. Only we can see them.</li><li><strong>Service providers:</strong> Cloudflare (website hosting and data storage), Stripe (card payments) and postcodes.io (we send it a postcode only, to work out approximate distances). Some of these may process data outside the UK, protected by approved safeguards such as the UK International Data Transfer Addendum.</li></ul>
+  <ul><li><strong>Venue details</strong> (name, address and contact details) are shown only to mediums with an active membership, and to us. Mediums who have signed up but not yet paid can see only the town, approximate distance and dates.</li><li><strong>Mediums' details</strong> are not shown to venues or other members. Only we can see them.</li><li><strong>Booking enquiries</strong> are seen only by the medium you sent them to, and by us if needed to deal with misuse.</li><li><strong>Service providers:</strong> Cloudflare (website hosting and data storage), Stripe (card payments), postcodes.io (we send it a postcode only, to work out approximate distances) and, if enabled, Resend (to send mediums an email alert when they receive an enquiry). Some of these may process data outside the UK, protected by approved safeguards such as the UK International Data Transfer Addendum.</li></ul>
   <p>We never sell your information or use it for advertising.</p>
   <h2>How long we keep it</h2>
-  <ul><li>Venue listings are deleted automatically 3 months after the last date listed, or straight away if you delete your listing.</li><li>Medium accounts that are never activated are deleted after 30 days. Accounts are deleted 24 months after membership ends, or straight away if you delete your account.</li><li>Payment records are kept for 6 years, then deleted.</li><li>Website security logs are kept for a short period to protect against misuse.</li></ul>
+  <ul><li>Venue listings are deleted automatically 3 months after the last date listed, or straight away if you delete your listing.</li><li>Medium accounts that are never activated are deleted after 30 days. Accounts are deleted 24 months after membership ends, or straight away if you delete your account.</li><li>Booking enquiries are deleted after 12 months.</li><li>Payment records are kept for 6 years, then deleted.</li><li>Website security logs are kept for a short period to protect against misuse.</li></ul>
   <h2>Cookies</h2>
   <p>We only use cookies that are strictly necessary: one to keep members logged in, and one for our administrators. We don't use analytics, advertising or tracking cookies, and our fonts are hosted on this website, not by a third party. This is why we don't need to ask for cookie consent.</p>
   <h2>Your rights</h2>
@@ -546,11 +557,14 @@ export function termsPage(S) {
     <li>We charge no commission. Fees and arrangements are agreed directly between you and the venue.</li>
     <li>You must contact venues only about performing at their venue, during office hours and in the way they prefer. You must not copy, share, resell or publish venue details, or use them for marketing.</li>
     <li>You are responsible for your own performances, including any insurance, licences and compliance with consumer protection law, such as making clear that demonstrations are for entertainment purposes where appropriate.</li>
+    <li>If you publish a public profile, everything in it must be accurate and must not be misleading, offensive or infringe anyone's rights, and any photo must be of you and yours to use. You must not claim results or abilities that could mislead consumers. We may hide or remove a profile at our discretion.</li>
+    <li>Booking enquiries you receive must only be used to discuss that booking.</li>
     <li>We may suspend or end a membership if these terms are broken, for example misuse of venue details. If we end it without good reason, we'll refund the unused part.</li>
   </ul>
   <h2>4. Cancellation and refunds</h2>
   <p>If you're a consumer, you have the right to cancel your membership within 14 days of paying, for a full refund. To cancel, contact us${S.contactEmail ? ` at <a href="mailto:${esc(S.contactEmail)}">${esc(S.contactEmail)}</a>` : ''}. Refunds are made to the original payment method within 14 days. After the 14-day period, membership fees are not refundable, except as required by law. This does not affect your statutory rights.</p>
   <h2>5. Our responsibility</h2>
+  <p>Medium profiles are written by the mediums themselves. We don't vet, recommend or guarantee any medium, venue or performance.</p>
   <p>We take reasonable care to run the service, but we can't guarantee venue listings are accurate or that venues will respond. We are not responsible for arrangements, payments, cancellations or disputes between mediums and venues. Nothing in these terms limits liability that cannot be limited by law, including for death or personal injury caused by negligence, or fraud.</p>
   <h2>6. Accounts and security</h2>
   <p>Keep your password private. Accounts are for one person only and must not be shared.</p>
@@ -564,3 +578,5 @@ export function termsPage(S) {
 export function notFound() {
   return `${pageHead('Page not found', 'We couldn\'t find that page', 'It may have moved. Try one of these instead.')}<section class="band"><div class="wrap center row-btns centered"><a class="btn btn-primary" href="/">Home</a><a class="btn btn-ghost" href="/venues/register/">Register a venue</a><a class="btn btn-ghost" href="/mediums/">For mediums</a></div></section>`;
 }
+
+export { I, fs, field, inp, area, tick, errTop, spam, pageHead, money, portalNav };
