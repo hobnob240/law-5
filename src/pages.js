@@ -47,7 +47,7 @@ export function shell({ S, origin, path, title, description, body, member, noind
     <button class="menu-btn" type="button" aria-expanded="false" aria-controls="nav"><span></span><span></span><span></span><span class="sr">Menu</span></button>
     <nav id="nav" class="nav" aria-label="Main">
       ${nav.map(([h, l]) => `<a href="${h}"${path === h || (h !== '/' && path.startsWith(h)) ? ' aria-current="page"' : ''}>${l}</a>`).join('')}
-      ${member ? `<a class="nav-cta" href="/members/">${I.user}My portal</a>` : `<a class="nav-login" href="/members/login/">Member login</a>`}
+      ${member ? `<a class="nav-cta" href="/members/">${I.user}My portal</a>` : `<a class="nav-login" href="/members/login/">Member login</a><a class="nav-cta gold" href="/venues/register/">List your venue free</a>`}
     </nav>
   </div>
 </header>
@@ -75,7 +75,7 @@ function field(f, name, label, input, hint) {
 }
 function ad(f, name, hint) { const ids = [hint ? `${f.t}-${name}-h` : '', f.e[name] ? `${f.t}-${name}-e` : ''].filter(Boolean).join(' '); return (ids ? ` aria-describedby="${ids}"` : '') + (f.e[name] ? ' aria-invalid="true"' : ''); }
 const inp = (f, name, type, auto, extra = '', hint) => `<input id="${f.t}-${name}" name="${name}" type="${type}" value="${esc(f.v[name] ?? '')}"${auto ? ` autocomplete="${auto}"` : ''}${extra}${ad(f, name, hint)}>`;
-const area = (f, name, rows, hint) => `<textarea id="${f.t}-${name}" name="${name}" rows="${rows}"${ad(f, name, hint)}>${esc(f.v[name] ?? '')}</textarea>`;
+const area = (f, name, rows, hint, req) => `<textarea${req ? ' required' : ''} id="${f.t}-${name}" name="${name}" rows="${rows}"${ad(f, name, hint)}>${esc(f.v[name] ?? '')}</textarea>`;
 function tick(f, name, label) {
   const err = f.e[name];
   return `<div class="field tick${err ? ' has-err' : ''}"><label class="check"><input type="checkbox" name="${name}" value="yes"${f.v[name] === 'yes' ? ' checked' : ''}${err ? ` aria-invalid="true" aria-describedby="${f.t}-${name}-e"` : ''}><span>${label}</span></label>${err ? `<span class="err" id="${f.t}-${name}-e">${esc(err)}</span>` : ''}</div>`;
@@ -100,6 +100,14 @@ function hero(S) {
 }
 export function homePage(S) {
   return `${hero(S)}
+<section class="proof" aria-label="Why use ${esc(S.siteName)}">
+  <ul class="wrap proof-in">
+    <li>${I.check}<span><strong>Free</strong> for venues</span></li>
+    <li>${I.check}<span><strong>No obligation</strong> to book</span></li>
+    <li>${I.check}<span><strong>No commission</strong> on bookings</span></li>
+    <li>${I.check}<span><strong>Direct contact</strong>, no middleman</span></li>
+  </ul>
+</section>
 <section class="band">
   <div class="wrap split">
     <div>
@@ -208,8 +216,8 @@ export function venueForm(S, o) {
     ${errTop(f)}${spam(o, 'venue')}
     <fieldset><legend>Your venue</legend>
       ${field(f, 'name', 'Venue name', inp(f, 'name', 'text', 'organization', ' required'))}
-      ${field(f, 'address', 'Venue address', area(f, 'address', 2))}
-      <div class="row2">${field(f, 'postcode', 'Postcode', inp(f, 'postcode', 'text', 'postal-code', ' required'))}${field(f, 'phone', 'Venue contact number', inp(f, 'phone', 'tel', 'tel', ' required', true), 'Mediums will only contact you during office hours.')}</div>
+      ${field(f, 'address', 'Venue address', area(f, 'address', 2, false, true))}
+      <div class="row2">${field(f, 'postcode', 'Postcode', inp(f, 'postcode', 'text', 'postal-code', ' required autocapitalize="characters"'))}${field(f, 'phone', 'Venue contact number', inp(f, 'phone', 'tel', 'tel', ' required', true), 'Mediums will only contact you during office hours.')}</div>
       ${field(f, 'email', 'Email address <span class="opt">(optional)</span>', inp(f, 'email', 'email', 'email'))}
     </fieldset>
     <fieldset><legend>Dates and contact</legend>
@@ -264,7 +272,7 @@ export function venueManage(S, o) {
     <input type="hidden" name="action" value="save">
     ${field(f, 'name', 'Venue name', inp(f, 'name', 'text', 'organization'))}
     ${field(f, 'address', 'Venue address', area(f, 'address', 2))}
-    <div class="row2">${field(f, 'postcode', 'Postcode', inp(f, 'postcode', 'text', 'postal-code'))}${field(f, 'phone', 'Venue contact number', inp(f, 'phone', 'tel', 'tel'))}</div>
+    <div class="row2">${field(f, 'postcode', 'Postcode', inp(f, 'postcode', 'text', 'postal-code', ' autocapitalize="characters"'))}${field(f, 'phone', 'Venue contact number', inp(f, 'phone', 'tel', 'tel'))}</div>
     ${field(f, 'email', 'Email address <span class="opt">(optional)</span>', inp(f, 'email', 'email', 'email'))}
     ${field(f, 'dates', 'Preferred dates', `<div class="date-grid">${Array.from({ length: 6 }, (_, i) => `<input type="date" name="dates" min="${min}" value="${esc(dates[i] || '')}" aria-label="Preferred date ${i + 1}"${i === 0 ? ' id="venue-dates"' : ''}>`).join('')}</div>`)}
     <fieldset class="radios${f.e.contact ? ' has-err' : ''}"><legend class="label">Preferred contact method</legend><div class="radio-row">${CONTACT_METHODS.map(c => `<label class="pill"><input type="radio" name="contact" value="${c}"${f.v.contact === c ? ' checked' : ''}><span>${c}</span></label>`).join('')}</div>${f.e.contact ? `<span class="err">${esc(f.e.contact)}</span>` : ''}</fieldset>
@@ -332,8 +340,8 @@ export function joinForm(S, o) {
     ${errTop(f)}${spam(o, 'join')}
     <fieldset><legend>Your details</legend>
       ${field(f, 'name', 'Name', inp(f, 'name', 'text', 'name', ' required'))}
-      ${field(f, 'address', 'Address', area(f, 'address', 2))}
-      <div class="row2">${field(f, 'postcode', 'Postcode', inp(f, 'postcode', 'text', 'postal-code', ' required'))}${field(f, 'phone', 'Contact number', inp(f, 'phone', 'tel', 'tel', ' required'))}</div>
+      ${field(f, 'address', 'Address', area(f, 'address', 2, false, true))}
+      <div class="row2">${field(f, 'postcode', 'Postcode', inp(f, 'postcode', 'text', 'postal-code', ' required autocapitalize="characters"'))}${field(f, 'phone', 'Contact number', inp(f, 'phone', 'tel', 'tel', ' required'))}</div>
       ${field(f, 'radius', 'How far are you willing to travel?', `<div class="suffix">${inp(f, 'radius', 'number', '', ' min="1" max="600" inputmode="numeric" required', true)}<span>miles</span></div>`, 'We use this to show you venues within reach.')}
     </fieldset>
     <fieldset><legend>Your login</legend>
@@ -382,6 +390,13 @@ function portalNav(path) {
   const items = [['/members/', 'Venues'], ['/members/account/', 'My account']];
   return `<nav class="portal-nav" aria-label="Members">${items.map(([h, l]) => `<a href="${h}"${path === h ? ' aria-current="page"' : ''}>${l}</a>`).join('')}<form method="post" action="/members/logout/"><button class="linkish" type="submit">Log out</button></form></nav>`;
 }
+function preview(o, m) {
+  const p = o.preview || [];
+  if (!p.length) return `<p class="fine">There are no venues within ${esc(m.radius)} miles of ${esc(m.postcode)} right now. New venues are added all the time.</p>`;
+  return `<div class="preview"><p class="preview-h"><strong>${p.length} venue${p.length === 1 ? '' : 's'}</strong> within ${esc(m.radius)} miles of you ${p.length === 1 ? 'is' : 'are'} looking for a medium right now</p>
+    <ul class="preview-list">${p.slice(0, 6).map(v => `<li>${I.lock}<span><strong>${esc(v.town || 'Venue')}</strong> · ${v.distance < 1 ? 'under 1' : esc(v.distance)} mi</span><span class="muted">${v.count} date${v.count === 1 ? '' : 's'} from ${esc(shortDate(v.next))}</span></li>`).join('')}</ul>
+    <p class="fine">Venue names and contact details unlock when your membership is active.</p></div>`;
+}
 export function portalPage(S, o) {
   const m = o.medium, active = isActive(m);
   const head = `<section class="portal-head"><div class="sky small" aria-hidden="true"></div><div class="wrap"><p class="eyebrow">Members' portal</p><h1>Hello, ${esc(m.name.split(' ')[0])}</h1>
@@ -393,6 +408,7 @@ export function portalPage(S, o) {
         <p class="eyebrow dark">${m.until ? 'Renew your membership' : 'Activate your membership'}</p>
         <p class="price">${money(S.pricePence)}<span> for 12 months</span></p>
         <p>Unlock venue listings and contact details for 12 months. One payment, no automatic renewal. Membership doesn't guarantee bookings.</p>
+        ${preview(o, m)}
         ${o.stripe ? `<form method="post" action="/members/checkout/"><button class="btn btn-primary btn-big" type="submit">${I.lock}Pay ${money(S.pricePence)} securely</button></form><p class="fine">You'll pay on Stripe's secure checkout page. We never see or store your card details.</p>`
           : `<div class="manual-pay"><p><strong>Card payments are being set up.</strong> To activate your membership now, please contact us${S.contactEmail ? ` at <a href="mailto:${esc(S.contactEmail)}">${esc(S.contactEmail)}</a>` : ''}.</p>${S.bankDetails ? `<p>You can pay by bank transfer:</p><p class="bank">${esc(S.bankDetails)}</p><p class="fine">Use your email address as the reference. We'll activate your membership as soon as the payment arrives.</p>` : ''}</div>`}
       </div>
@@ -405,7 +421,7 @@ export function portalPage(S, o) {
     <div class="sec-head"><div><h2>Venues looking for mediums</h2><p class="muted">${showAll ? 'Showing every venue with upcoming dates.' : `Showing venues within ${esc(m.radius)} miles of ${esc(m.postcode)}.`}</p></div>
     <div class="toggle">${showAll ? `<a class="btn btn-ghost" href="/members/">Only within ${esc(m.radius)} miles</a>` : `<a class="btn btn-ghost" href="/members/?all=1">Show all venues</a>`}</div></div>
     ${venues.length ? `<div class="venue-grid">${venues.map(v => `<a class="venue-card" href="/members/venues/${esc(v.id)}">
-      <div class="vc-top"><h3>${esc(v.name)}</h3>${v.distance != null ? `<span class="dist">${v.distance} mi</span>` : ''}</div>
+      <div class="vc-top"><h3>${esc(v.name)}</h3>${v.demo ? '<span class="demo-pill">Demo</span>' : ''}${v.distance != null ? `<span class="dist">${v.distance < 1 ? '&lt;1' : v.distance} mi</span>` : ''}</div>
       <p class="vc-loc">${I.pin}${esc([v.town, v.postcode].filter(Boolean).join(' · '))}</p>
       <p class="vc-dates">${I.cal}${v.upcoming.slice(0, 3).map(d => esc(niceDate(d))).join(', ')}${v.upcoming.length > 3 ? ` +${v.upcoming.length - 3} more` : ''}</p>
       <p class="vc-type">${I.moon}${esc(NIGHT_TYPES[v.nightType] || '')}${v.nightType === 'fee' && v.fee ? `: ${esc(v.fee)}` : ''}</p>
@@ -413,9 +429,21 @@ export function portalPage(S, o) {
       : `<div class="card empty"><p>${showAll ? 'There are no venues with upcoming dates right now. New venues are added all the time, so check back soon.' : `No venues within ${esc(m.radius)} miles right now.`}</p>${showAll ? '' : '<p><a class="btn btn-primary" href="/members/?all=1">Show all venues</a></p>'}</div>`}
   </div></section>`;
 }
+function contactButtons(S, v, m, upcoming) {
+  if (!m) return '';
+  const when = upcoming.length ? ` on ${niceDate(upcoming[0])}${upcoming.length > 1 ? ' (or one of your other dates)' : ''}` : '';
+  const msg = `Hello, my name is ${m.name} and I'm a medium. I found ${v.name.replace(/\s*\(demo\)$/, '')} on ${S.siteName} and I'd love to perform a mediumship evening for you${when}. You can reach me on ${prettyPhone(m.phone)}${m.email ? ` or ${m.email}` : ''}. Thank you.`;
+  const subject = `Mediumship evening at ${v.name.replace(/\s*\(demo\)$/, '')}`;
+  const tel = 'tel:+44' + v.phone.slice(1), mobile = /^07/.test(v.phone);
+  const btn = (href, label, icon, main) => `<a class="btn ${main ? 'btn-primary' : 'btn-ghost'}" href="${esc(href)}">${icon}${label}</a>`;
+  const order = { Call: ['call', 'text', 'email'], Text: ['text', 'call', 'email'], Email: ['email', 'call', 'text'] }[v.contact] || ['call', 'text', 'email'];
+  const make = { call: main => btn(tel, 'Call the venue', I.phone, main), text: main => mobile ? btn('sms:+44' + v.phone.slice(1) + '?&body=' + encodeURIComponent(msg), 'Send a text', I.phone, main) : '', email: main => v.email ? btn('mailto:' + v.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(msg), 'Send an email', I.mail, main) : '' };
+  const buttons = order.map((k, i) => make[k](i === 0)).filter(Boolean).join('');
+  return `<div class="contact-btns">${buttons}</div><p class="fine">Texts and emails open on your phone with a message already written for you to check and send. Arrange the date, fee and details directly with the venue.</p>`;
+}
 export function venueDetail(S, o) {
   const v = o.venue, upcoming = (v.dates || []).filter(d => d >= todayUK());
-  return `<section class="portal-head"><div class="sky small" aria-hidden="true"></div><div class="wrap"><p class="eyebrow"><a href="/members/">← All venues</a></p><h1>${esc(v.name)}</h1><p class="lede">${esc([v.town, v.postcode].filter(Boolean).join(' · '))}${o.distance != null ? ` · ${o.distance} miles from you` : ''}</p></div></section>
+  return `<section class="portal-head"><div class="sky small" aria-hidden="true"></div><div class="wrap"><p class="eyebrow"><a href="/members/">← All venues</a></p><h1>${esc(v.name)}</h1>${v.demo ? '<p class="demo-note">This is a demo listing for testing. The phone numbers and emails are not real.</p>' : ''}<p class="lede">${esc([v.town, v.postcode].filter(Boolean).join(' · '))}${o.distance != null ? ` · ${o.distance < 1 ? 'under a mile' : o.distance === 1 ? '1 mile' : o.distance + ' miles'} from you` : ''}</p></div></section>
 <section class="band"><div class="wrap split detail">
   <div class="card">
     <h2>Contact the venue</h2>
@@ -426,6 +454,7 @@ export function venueDetail(S, o) {
       <li>${I.pin}<span><small>Address</small>${esc(v.address)}<br>${esc(v.postcode)}</span></li>
     </ul>
     ${v.notes ? `<h3>Notes from the venue</h3><p class="notes">${esc(v.notes)}</p>` : ''}
+    ${contactButtons(S, v, o.medium, upcoming)}
   </div>
   <div class="card">
     <h2>Dates wanted</h2>
@@ -448,7 +477,7 @@ export function accountPage(S, o) {
       ${field(f, 'name', 'Name', inp(f, 'name', 'text', 'name'))}
       ${field(f, 'email', 'Email', inp(f, 'email', 'email', 'email', ' autocapitalize="none"'))}
       ${field(f, 'address', 'Address', area(f, 'address', 2))}
-      <div class="row2">${field(f, 'postcode', 'Postcode', inp(f, 'postcode', 'text', 'postal-code'))}${field(f, 'phone', 'Contact number', inp(f, 'phone', 'tel', 'tel'))}</div>
+      <div class="row2">${field(f, 'postcode', 'Postcode', inp(f, 'postcode', 'text', 'postal-code', ' autocapitalize="characters"'))}${field(f, 'phone', 'Contact number', inp(f, 'phone', 'tel', 'tel'))}</div>
       ${field(f, 'radius', 'How far are you willing to travel?', `<div class="suffix">${inp(f, 'radius', 'number', '', ' min="1" max="600" inputmode="numeric"')}<span>miles</span></div>`)}
       <button class="btn btn-primary" type="submit">Save details</button>
     </form>
@@ -489,7 +518,7 @@ export function privacyPage(S) {
   <h3>Payments</h3>
   <p>Card payments are handled by Stripe. We never see or store your card details. Stripe processes your payment information under its own privacy policy, and tells us whether the payment succeeded.</p>
   <h2>Who can see your information</h2>
-  <ul><li><strong>Venue details</strong> are shown only to mediums with an active membership, and to us.</li><li><strong>Mediums' details</strong> are not shown to venues or other members. Only we can see them.</li><li><strong>Service providers:</strong> Cloudflare (website hosting and data storage), Stripe (card payments) and postcodes.io (we send it a postcode only, to work out approximate distances). Some of these may process data outside the UK, protected by approved safeguards such as the UK International Data Transfer Addendum.</li></ul>
+  <ul><li><strong>Venue details</strong> (name, address and contact details) are shown only to mediums with an active membership, and to us. Mediums who have signed up but not yet paid can see only the town, approximate distance and dates.</li><li><strong>Mediums' details</strong> are not shown to venues or other members. Only we can see them.</li><li><strong>Service providers:</strong> Cloudflare (website hosting and data storage), Stripe (card payments) and postcodes.io (we send it a postcode only, to work out approximate distances). Some of these may process data outside the UK, protected by approved safeguards such as the UK International Data Transfer Addendum.</li></ul>
   <p>We never sell your information or use it for advertising.</p>
   <h2>How long we keep it</h2>
   <ul><li>Venue listings are deleted automatically 3 months after the last date listed, or straight away if you delete your listing.</li><li>Medium accounts that are never activated are deleted after 30 days. Accounts are deleted 24 months after membership ends, or straight away if you delete your account.</li><li>Payment records are kept for 6 years, then deleted.</li><li>Website security logs are kept for a short period to protect against misuse.</li></ul>

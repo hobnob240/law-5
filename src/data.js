@@ -1,5 +1,5 @@
 // Storage for venues, mediums, memberships and payments (Cloudflare KV).
-import { clean, EMAIL_RE, normPhone, normPostcode, sha256hex, randomHex, newId, todayUK } from './lib.js';
+import { clean, EMAIL_RE, normPhone, normPostcode, sha256hex, randomHex, newId, todayUK, hashPassword } from './lib.js';
 
 export const TERMS_VERSION = '2026-10';
 export const NIGHT_TYPES = {
@@ -80,7 +80,7 @@ export function checkVenue(f, { forUpdate = false } = {}) {
   if (v.nightType !== 'fee') v.fee = '';
   return { value: v, errors: e };
 }
-const vSummary = v => ({ id: v.id, status: v.status, name: v.name, town: v.town || '', postcode: v.postcode, lat: v.lat ?? null, lng: v.lng ?? null, dates: v.dates, nightType: v.nightType, fee: v.fee, createdAt: v.createdAt, updatedAt: v.updatedAt });
+const vSummary = v => ({ id: v.id, status: v.status, name: v.name, town: v.town || '', postcode: v.postcode, lat: v.lat ?? null, lng: v.lng ?? null, dates: v.dates, nightType: v.nightType, fee: v.fee, createdAt: v.createdAt, updatedAt: v.updatedAt, demo: !!v.demo });
 export async function venueIndex(env) { return (await env.KV.get('vidx', 'json')) || []; }
 async function saveVenueIndex(env, list) { await env.KV.put('vidx', JSON.stringify(list)); }
 export async function getVenue(env, id) { return /^[a-z0-9]{8,24}$/.test(String(id)) ? env.KV.get('venue:' + id, 'json') : null; }
@@ -129,7 +129,7 @@ export function checkMedium(f, { forUpdate = false } = {}) {
   }
   return { value: m, errors: e };
 }
-const mSummary = m => ({ id: m.id, name: m.name, email: m.email, town: m.town || '', postcode: m.postcode, until: m.until || '', createdAt: m.createdAt, lastLoginAt: m.lastLoginAt || '' });
+const mSummary = m => ({ id: m.id, name: m.name, email: m.email, town: m.town || '', postcode: m.postcode, until: m.until || '', createdAt: m.createdAt, lastLoginAt: m.lastLoginAt || '', demo: !!m.demo });
 export async function mediumIndex(env) { return (await env.KV.get('midx', 'json')) || []; }
 export async function getMedium(env, id) { return /^[a-z0-9]{8,24}$/.test(String(id)) ? env.KV.get('medium:' + id, 'json') : null; }
 export async function mediumByEmail(env, email) {
@@ -193,4 +193,41 @@ export async function tidy(env) {
   // payment records: kept 6 years for tax records, then deleted
   for (const p of await listPayments(env)) if (p.at && now - Date.parse(p.at) > 6 * 366 * 86400000) { await env.KV.delete('pay:' + p.id); done.payments++; }
   return done;
+}
+
+/* ---------------- demo data (for trying the site; clearly labelled, removable in one click) ---------------- */
+// Phone numbers are Ofcom's reserved drama ranges (01632 960xxx, 07700 900xxx) and emails use example.com, so nobody real can be contacted.
+const DEMO_VENUES = [
+  { name: 'The Crown & Anchor (demo)', address: '12 Market Square, Hanley', postcode: 'ST1 1AA', town: 'Stoke-on-Trent', lat: 53.0246, lng: -2.1790, phone: '01632960101', email: 'crown-demo@example.com', contact: 'Email', notes: 'Email first please. Happy to call back between 3pm and 5pm.', nightType: 'split', fee: '', days: [24, 52, 80] },
+  { name: 'The Swan Social Club (demo)', address: '4 Station Road, Stafford', postcode: 'ST16 1AA', town: 'Stafford', lat: 52.8064, lng: -2.1170, phone: '07700900102', email: '', contact: 'Text', notes: 'Text only please. We have a function room for 80 people.', nightType: 'fee', fee: '£200', days: [31, 66] },
+  { name: 'The Old Mill Hotel (demo)', address: '1 Mill Lane, Leek', postcode: 'ST13 1AA', town: 'Staffordshire Moorlands', lat: 53.1053, lng: -2.0236, phone: '01632960103', email: 'oldmill-demo@example.com', contact: 'Call', notes: '', nightType: 'bar', fee: '', days: [18, 45, 101] },
+  { name: 'The Railway Inn (demo)', address: '22 Nantwich Road, Crewe', postcode: 'CW1 1AA', town: 'Cheshire East', lat: 53.0979, lng: -2.4416, phone: '01632960104', email: 'railway-demo@example.com', contact: 'Call', notes: 'Weeknights only.', nightType: 'split', fee: '', days: [38] }
+];
+export async function createDemo(env) {
+  await removeDemo(env);
+  const today = todayUK(), dayPlus = n => { const d = new Date(today + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const venues = [];
+  for (const d of DEMO_VENUES) {
+    const { days, town, lat, lng, ...value } = d;
+    const { venue, token } = await createVenue(env, { ...value, dates: days.map(dayPlus) }, { town, lat, lng }, false);
+    venue.demo = true; await putVenue(env, venue);
+    venues.push({ name: venue.name, path: '/venues/manage/' + token });
+  }
+  const password = 'demo-' + randomHex(5);
+  const now = new Date().toISOString();
+  const m = { id: newId(), name: 'Demo Medium', email: 'demo-medium@example.com', address: '1 Example Street, Stoke-on-Trent', postcode: 'ST1 1AA', phone: '07700900100', radius: 30,
+    town: 'Stoke-on-Trent', lat: 53.0246, lng: -2.1790, hash: await hashPassword(password), ver: 1, until: addMonths(today, 12), memberSince: today,
+    createdAt: now, consentAt: now, termsVersion: TERMS_VERSION, demo: true };
+  await putMedium(env, m); await setMediumEmail(env, m);
+  const u = { ...m, id: newId(), name: 'Demo Unpaid Medium', email: 'demo-unpaid@example.com', until: '', memberSince: '' };
+  await putMedium(env, u); await setMediumEmail(env, u);
+  await env.KV.put('demoinfo', JSON.stringify({ createdAt: now }));
+  return { email: m.email, unpaidEmail: u.email, password, venues };
+}
+export async function removeDemo(env) {
+  let n = 0;
+  for (const v of await venueIndex(env)) if (v.demo) { await deleteVenue(env, v.id); n++; }
+  for (const s of await mediumIndex(env)) if (s.demo) { const m = await getMedium(env, s.id); if (m) { await deleteMedium(env, m); n++; } }
+  await env.KV.delete('demoinfo');
+  return n;
 }

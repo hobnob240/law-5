@@ -2,13 +2,13 @@
 // Secrets (SETUP_CODE, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) live only in Cloudflare and are never sent to browsers.
 import {
   PUBLIC_CSP, ADMIN_CSP, esc, clean, EMAIL_RE, todayUK, json, secure, html, redirect, sameOrigin, readJson, readForm,
-  randomHex, sha256hex, safeEqual, hashPassword, verifyPassword, passwordProblem, createSession, getSession, endSession,
+  prettyPhone, randomHex, sha256hex, safeEqual, hashPassword, verifyPassword, passwordProblem, createSession, getSession, endSession,
   limit, formToken, checkToken, log, lookupPostcode, miles
 } from './lib.js';
 import {
   TERMS_VERSION, NIGHT_TYPES, validSettings, getSettings, isActive, addMonths, checkVenue, venueIndex, getVenue, putVenue,
   deleteVenue, createVenue, venueByToken, checkMedium, mediumIndex, getMedium, mediumByEmail, putMedium, setMediumEmail,
-  deleteMedium, recordPayment, listPayments, tidy
+  deleteMedium, recordPayment, listPayments, tidy, createDemo, removeDemo
 } from './data.js';
 import { stripeReady, stripeMode, createCheckout, getCheckout, verifyWebhook } from './stripe.js';
 import * as P from './pages.js';
@@ -133,7 +133,7 @@ async function venueRegister(req, env, url, method, S, page) {
   return page({ title: `Thank you | ${S.siteName}`, noindex: true, body: P.venueThanks(S, { origin: url.origin, token, pending: venue.status === 'pending' }) }, { noindex: true, noReferrer: true });
 }
 
-const venueValues = v => ({ name: v.name, address: v.address, postcode: v.postcode, phone: v.phone, email: v.email, contact: v.contact, notes: v.notes, nightType: v.nightType, fee: v.fee, dates: v.dates });
+const venueValues = v => ({ name: v.name, address: v.address, postcode: v.postcode, phone: prettyPhone(v.phone), email: v.email, contact: v.contact, notes: v.notes, nightType: v.nightType, fee: v.fee, dates: v.dates });
 
 async function venueManage(req, env, url, method, S, page, token) {
   const rl = await limit(env, req, 'manage', 30, 3600);
@@ -254,8 +254,11 @@ async function portal(req, env, url, method, S, page, m) {
   const notice = url.searchParams.get('notice') === 'paid' ? notices.paid : url.searchParams.get('payment') === 'cancelled' ? notices.cancelled : '';
   const error = url.searchParams.get('error') === 'pay' ? 'We couldn\'t start the payment. Please try again, or contact us.' : url.searchParams.get('error') === 'pending' ? 'We couldn\'t confirm your payment yet. If you were charged, it will show here shortly. Please refresh in a minute.' : '';
   const showAll = url.searchParams.get('all') === '1';
-  const venues = isActive(m) ? upcomingFor(m, await venueIndex(env), showAll) : [];
-  return page({ title: `Members' portal | ${S.siteName}`, noindex: true, body: P.portalPage(S, { medium: m, venues, showAll, notice, error, stripe: stripeReady(env) }) }, { noindex: true });
+  const all = await venueIndex(env);
+  const venues = isActive(m) ? upcomingFor(m, all, showAll) : [];
+  // before paying: show how many venues are within reach (town and date only, no names or contact details)
+  const preview = isActive(m) ? [] : upcomingFor(m, all, false).map(v => ({ town: v.town, distance: v.distance, next: v.upcoming[0], count: v.upcoming.length }));
+  return page({ title: `Members' portal | ${S.siteName}`, noindex: true, body: P.portalPage(S, { medium: m, venues, preview, showAll, notice, error, stripe: stripeReady(env) }) }, { noindex: true });
 }
 
 async function venueDetail(env, url, S, page, m, id) {
@@ -263,7 +266,7 @@ async function venueDetail(env, url, S, page, m, id) {
   if (!isActive(m)) return redirect('/members/');
   const v = await getVenue(env, id);
   if (!v || v.status !== 'live') return notFound(env, url, S, m);
-  return page({ title: `${v.name} | ${S.siteName}`, noindex: true, body: P.venueDetail(S, { venue: v, distance: miles(m, v) }) }, { noindex: true });
+  return page({ title: `${v.name} | ${S.siteName}`, noindex: true, body: P.venueDetail(S, { venue: v, distance: miles(m, v), medium: m }) }, { noindex: true });
 }
 
 const mediumValues = m => ({ name: m.name, email: m.email, address: m.address, postcode: m.postcode, phone: m.phone, radius: m.radius });
@@ -600,6 +603,17 @@ async function api(req, env, url, method, a, p) {
     await endSession(req, env, 'admin');
     await log(env, req, a.user, 'Logged out all other devices');
     return json({ ok: true }, 200, { 'Set-Cookie': await createSession(env, 'admin', { user: a.user, ver: a.ver }) });
+  }
+  if (p === 'demo' && method === 'GET') return json({ demo: await env.KV.get('demoinfo', 'json') });
+  if (p === 'demo' && method === 'POST') {
+    const r = await createDemo(env);
+    await log(env, req, a.user, 'Created demo data (4 demo venues, 2 demo medium logins)');
+    return json({ ok: true, ...r, venues: r.venues.map(v => ({ name: v.name, link: url.origin + v.path })), loginUrl: url.origin + '/members/login/' });
+  }
+  if (p === 'demo' && method === 'DELETE') {
+    const n = await removeDemo(env);
+    await log(env, req, a.user, `Removed demo data (${n} records)`);
+    return json({ ok: true, removed: n });
   }
   if (p === 'log' && method === 'GET') return json({ log: (await env.KV.get('log', 'json')) || [] });
 

@@ -50,8 +50,8 @@ function confirmBtn(label, question, run, cls = 'btn btn-danger') {
   return b;
 }
 const pill = (text, kind) => h('span', { class: 'pill ' + kind }, text);
-const statusPill = s => s === 'live' ? pill('Live', 'ok') : s === 'pending' ? pill('Needs approval', 'warn') : pill('Hidden', 'off');
-const memberPill = m => m.until && m.until >= today ? pill('Active to ' + day(m.until), 'ok') : m.until ? pill('Ended ' + day(m.until), 'off') : pill('Not paid', 'warn');
+const statusPill = (s, demo) => demo ? pill('Demo · ' + (s === 'live' ? 'live' : s), 'warn') : s === 'live' ? pill('Live', 'ok') : s === 'pending' ? pill('Needs approval', 'warn') : pill('Hidden', 'off');
+const memberPill = m => m.demo ? pill('Demo', 'warn') : m.until && m.until >= today ? pill('Active to ' + day(m.until), 'ok') : m.until ? pill('Ended ' + day(m.until), 'off') : pill('Not paid', 'warn');
 
 function tabs() {
   $('tabs').replaceChildren(...TABS.map(([k, l]) => h('button', { type: 'button', class: 'tab', 'aria-current': tab === k ? 'page' : null, onclick: () => go(k) }, l)));
@@ -99,7 +99,7 @@ async function venues() {
       return h('button', { type: 'button', class: 'row', onclick: () => openVenue(v.id) },
         h('span', { class: 'row-main' }, h('strong', {}, v.name), h('span', { class: 'muted' }, [v.town, v.postcode].filter(Boolean).join(' · '))),
         h('span', { class: 'row-meta' }, up.length ? `Next: ${day(up[0])}${up.length > 1 ? ` +${up.length - 1}` : ''}` : 'No upcoming dates'),
-        statusPill(v.status));
+        statusPill(v.status, v.demo));
     }) : [h('p', { class: 'muted pad' }, 'No venues match.')]));
   };
   const counts = s => d.venues.filter(v => s === 'all' || v.status === s).length;
@@ -226,7 +226,7 @@ async function payments() {
 
 /* ---------------- settings ---------------- */
 async function settings() {
-  const d = await api('GET', 'settings'); const s = { ...d.settings, price: String(d.settings.pricePence / 100) };
+  const [d, demo] = await Promise.all([api('GET', 'settings'), api('GET', 'demo')]); d.demo = demo.demo; const s = { ...d.settings, price: String(d.settings.pricePence / 100) };
   const inp = (k, o = {}) => h(o.area ? 'textarea' : 'input', { type: o.area ? null : (o.type || 'text'), rows: o.rows, value: s[k] ?? '', placeholder: o.ph, oninput: e => { s[k] = e.target.value; } });
   const save = async b => {
     const body = { ...s, pricePence: Math.round(Number(s.price) * 100) }; delete body.price;
@@ -247,6 +247,7 @@ async function settings() {
           h('label', { class: 'checkline' }, h('input', { type: 'checkbox', checked: s.approveVenues, onchange: e => { s.approveVenues = e.target.checked; } }), ' Check new venues before mediums can see them (recommended)'),
           field('Bank details for manual payments (optional)', inp('bankDetails', { area: true, rows: 3, ph: 'Account name, sort code, account number' }), 'Only shown to logged-in mediums who haven\'t paid, while card payments aren\'t connected.')),
         h('button', { type: 'button', class: 'btn btn-primary', onclick: e => save(e.target) }, 'Save settings')),
+      h('div', {}, demoCard(d.demo),
       h('section', { class: 'card' }, h('h2', {}, 'Card payments (Stripe)'),
         h('dl', { class: 'dl' },
           h('dt', {}, 'Secret key'), h('dd', {}, d.stripe.ready ? pill(d.stripe.mode === 'live' ? 'Connected (live)' : 'Connected (test mode)', d.stripe.mode === 'live' ? 'ok' : 'warn') : pill('Not connected', 'off')),
@@ -256,7 +257,27 @@ async function settings() {
           h('li', {}, 'In Stripe, go to Developers → API keys and copy the Secret key (starts sk_live_ or sk_test_).'),
           h('li', {}, 'In Cloudflare: Workers & Pages → book-a-medium-night → Settings → Variables and Secrets → Add. Type: Secret. Name: STRIPE_SECRET_KEY. Paste the key and Deploy.'),
           h('li', {}, ['In Stripe, go to Developers → Webhooks → Add endpoint. URL: ', h('code', {}, d.webhookUrl), '. Event: checkout.session.completed.']),
-          h('li', {}, 'Copy the webhook\'s Signing secret (starts whsec_) and add it in Cloudflare as a Secret named STRIPE_WEBHOOK_SECRET.')))));
+          h('li', {}, 'Copy the webhook\'s Signing secret (starts whsec_) and add it in Cloudflare as a Secret named STRIPE_WEBHOOK_SECRET.'))))));
+}
+
+function demoCard(info) {
+  const out = h('div');
+  const show = r => out.replaceChildren(h('div', { class: 'demo-out' },
+    h('p', {}, h('strong', {}, 'Demo logins created. Copy these now: the password is not shown again.')),
+    h('dl', { class: 'dl' },
+      h('dt', {}, 'Member login page'), h('dd', {}, h('a', { href: r.loginUrl, target: '_blank', rel: 'noopener' }, r.loginUrl)),
+      h('dt', {}, 'Paid medium'), h('dd', {}, r.email),
+      h('dt', {}, 'Unpaid medium'), h('dd', {}, r.unpaidEmail),
+      h('dt', {}, 'Password (both)'), h('dd', {}, h('code', {}, r.password))),
+    h('p', {}, h('strong', {}, 'Venue private links'), ' (what a venue uses to change or delete its listing):'),
+    h('ul', { class: 'list' }, r.venues.map(v => h('li', {}, h('a', { href: v.link, target: '_blank', rel: 'noopener' }, v.name))))));
+  return h('section', { class: 'card' }, h('h2', {}, 'Demo data'),
+    h('p', { class: 'muted' }, 'Adds 4 demo venues near Stoke-on-Trent and 2 demo medium logins (one paid, one unpaid) so you can see the site as a medium or a venue. They are labelled "demo" and use fake phone numbers and example.com emails. Remove them before you launch.'),
+    info ? h('p', {}, pill('Demo data is on', 'warn'), ' created ' + when(info.createdAt)) : null,
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn btn-primary', onclick: async e => { const r = await act(e.target, () => api('POST', 'demo', {}), 'Demo data created'); if (r) show(r); } }, info ? 'Recreate demo data' : 'Create demo data'),
+      info ? confirmBtn('Remove demo data', 'Tap again to remove', async b => { if (await act(b, () => api('DELETE', 'demo', {}), 'Demo data removed')) settings(); }, 'btn') : null),
+    out);
 }
 
 /* ---------------- account ---------------- */

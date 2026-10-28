@@ -128,3 +128,5 @@ body.auth { min-height: 100vh; display: grid; place-items: center; padding: 24px
   .tabs { flex-wrap: wrap; overflow: visible; padding-bottom: 6px; }
   .tab { padding: 9px 10px; border-bottom-width: 2px; }
 }
+
+.demo-out { margin-top: 16px; padding: 14px; border-radius: 12px; background: #fff8e6; border: 1px solid #f0d79a; }
