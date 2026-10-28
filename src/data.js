@@ -1,5 +1,5 @@
 // Storage for venues, mediums, memberships and payments (Cloudflare KV).
-import { clean, EMAIL_RE, normPhone, normPostcode, sha256hex, randomHex, newId, todayUK, hashPassword } from './lib.js';
+import { clean, line, EMAIL_RE, normPhone, normPostcode, sha256hex, randomHex, newId, todayUK, hashPassword } from './lib.js';
 
 export const TERMS_VERSION = '2026-10';
 export const NIGHT_TYPES = {
@@ -22,9 +22,9 @@ export const DEFAULT_SETTINGS = {
 export function validSettings(input) {
   const s = input || {}, errors = [];
   const out = {
-    siteName: clean(s.siteName, 60) || DEFAULT_SETTINGS.siteName,
-    operator: clean(s.operator, 160),
-    contactEmail: clean(s.contactEmail, 120).toLowerCase(),
+    siteName: line(s.siteName, 60) || DEFAULT_SETTINGS.siteName,
+    operator: line(s.operator, 160),
+    contactEmail: line(s.contactEmail, 120).toLowerCase(),
     postalAddress: clean(s.postalAddress, 300),
     icoNumber: clean(s.icoNumber, 20).toUpperCase(),
     pricePence: Math.round(Number(s.pricePence)),
@@ -56,9 +56,9 @@ export function parseDates(list) {
 /* ---------------- venues ---------------- */
 export function checkVenue(f, { forUpdate = false } = {}) {
   const v = {
-    name: clean(f.name, 100), address: clean(f.address, 200), postcode: normPostcode(f.postcode),
-    phone: normPhone(f.phone), email: clean(f.email, 120).toLowerCase(), contact: CONTACT_METHODS.includes(f.contact) ? f.contact : '',
-    notes: clean(f.notes, 600), nightType: NIGHT_TYPES[f.nightType] ? f.nightType : '', fee: clean(f.fee, 60),
+    name: line(f.name, 100), address: clean(f.address, 200), postcode: normPostcode(f.postcode),
+    phone: normPhone(f.phone), email: line(f.email, 120).toLowerCase(), contact: CONTACT_METHODS.includes(f.contact) ? f.contact : '',
+    notes: clean(f.notes, 600), nightType: NIGHT_TYPES[f.nightType] ? f.nightType : '', fee: line(f.fee, 60),
     dates: parseDates(f.dates)
   };
   const e = {};
@@ -113,7 +113,7 @@ export async function venueByToken(env, token) {
 /* ---------------- mediums ---------------- */
 export function checkMedium(f, { forUpdate = false } = {}) {
   const m = {
-    name: clean(f.name, 80), email: clean(f.email, 120).toLowerCase(), address: clean(f.address, 200), postcode: normPostcode(f.postcode),
+    name: line(f.name, 80), email: line(f.email, 120).toLowerCase(), address: clean(f.address, 200), postcode: normPostcode(f.postcode),
     phone: normPhone(f.phone), radius: Math.round(Number(f.radius))
   };
   const e = {};

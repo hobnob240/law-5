@@ -4,6 +4,8 @@ export const PUBLIC_CSP = "default-src 'self'; script-src 'self'; style-src 'sel
 export const ADMIN_CSP = "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
 
 export const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// single-line text (names, subjects): no line breaks, collapsed spaces
+export const line = (v, max) => clean(Array.isArray(v) ? v[0] : v, max * 2).replace(/\s+/g, ' ').trim().slice(0, max);
 export const clean = (v, max) => String(v == null ? '' : v).replace(/\r/g, '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, max);
 export const EMAIL_RE = /^[^\s@<>"(),;:]+@[^\s@<>"(),;:]+\.[a-z]{2,}$/i;
 export const POSTCODE_RE = /^([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})$/i;
@@ -52,11 +54,18 @@ export function sameOrigin(req, url) {
   const r = req.headers.get('referer');
   return !!r && r.startsWith(url.origin + '/');
 }
-export async function readJson(req) { try { const t = await req.text(); if (t.length > 512 * 1024) return null; const v = JSON.parse(t); return v && typeof v === 'object' ? v : null; } catch { return null; } }
+export async function readJson(req) { try { const t = await req.text(); if (t.length > 512 * 1024) return null; const v = JSON.parse(t, (k, x) => (k === '__proto__' || k === 'constructor' || k === 'prototype') ? undefined : x); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; } }
 export async function readForm(req) {
   const len = Number(req.headers.get('content-length') || 0);
   if (len > 64 * 1024) return null;
-  try { const f = await req.formData(); const o = {}; for (const [k, v] of f.entries()) if (typeof v === 'string') { if (o[k] === undefined) o[k] = v; else o[k] = [].concat(o[k], v); } return o; } catch { return null; }
+  try {
+    const f = await req.formData(), o = Object.create(null); // no prototype, so field names like __proto__ can't change behaviour
+    for (const [k, v] of f.entries()) {
+      if (typeof v !== 'string' || k.length > 40 || k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      if (o[k] === undefined) o[k] = v; else o[k] = [].concat(o[k], v).slice(0, 30);
+    }
+    return o;
+  } catch { return null; }
 }
 
 /* ---------- crypto ---------- */

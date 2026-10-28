@@ -1,5 +1,5 @@
 // Public medium profiles (opt-in) and booking enquiries sent from venues to a specific medium.
-import { clean, EMAIL_RE, normPhone, normPostcode, randomHex } from './lib.js';
+import { clean, line, EMAIL_RE, normPhone, normPostcode, randomHex } from './lib.js';
 import { isActive, parseDates, NIGHT_TYPES } from './data.js';
 
 export const isPublic = m => !!(m && m.profile && m.profile.on && !m.profile.hidden && isActive(m));
@@ -18,7 +18,7 @@ function cleanUrl(v) {
 export function checkProfile(f) {
   const web = cleanUrl(f.website), fb = cleanUrl(f.facebook);
   const v = {
-    on: f.on === 'yes', stageName: clean(f.stageName, 60), areas: clean(f.areas, 120), bio: clean(f.bio, 1200),
+    on: f.on === 'yes', stageName: line(f.stageName, 60), areas: line(f.areas, 120), bio: clean(f.bio, 1200),
     website: web.url || '', facebook: fb.url || '', emailAlerts: f.emailAlerts === 'yes'
   };
   const e = {};
@@ -33,7 +33,7 @@ export function checkProfile(f) {
 
 export function checkEnquiry(f) {
   const v = {
-    venueName: clean(f.venueName, 100), contactName: clean(f.contactName, 80), phone: normPhone(f.phone), email: clean(f.email, 120).toLowerCase(),
+    venueName: line(f.venueName, 100), contactName: line(f.contactName, 80), phone: normPhone(f.phone), email: line(f.email, 120).toLowerCase(),
     postcode: normPostcode(f.postcode), dates: parseDates(f.dates), nightType: NIGHT_TYPES[f.nightType] ? f.nightType : '', message: clean(f.message, 1000)
   };
   const e = {};

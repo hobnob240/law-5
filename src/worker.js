@@ -103,6 +103,8 @@ async function route(req, env, ctx, url) {
   return notFound(env, url, S, m);
 }
 
+// login fields must be a single plain string: arrays, objects and over-long values are treated as empty
+const str = (v, max = 200) => typeof v === 'string' && v.length <= max ? v : '';
 const notAllowed = () => new Response('Method not allowed', { status: 405 });
 const pageHeadSimple = (e, t, l) => `<section class="page-head"><div class="sky small" aria-hidden="true"></div><div class="wrap"><p class="eyebrow">${esc(e)}</p><h1>${esc(t)}</h1><p class="lede">${esc(l)}</p></div></section>`;
 async function notFound(env, url, S, m) {
@@ -193,7 +195,7 @@ async function join(req, env, url, method, S, page, current) {
   const rl = await limit(env, req, 'join', 6, 3600);
   if (rl.blocked) return again({ form: 'Too many sign-ups from this connection. Please try again in an hour.' });
   const { value, errors } = checkMedium(f);
-  const pw = String(f.password || '');
+  const pw = str(f.password);
   const pp = passwordProblem(pw, value.name, value.email.split('@')[0]);
   if (pp) errors.password = pp;
   if (!errors.email && await mediumByEmail(env, value.email)) errors.email = 'There\'s already an account with this email. Please log in instead.';
@@ -217,12 +219,12 @@ async function memberLogin(req, env, url, method, S, page, current) {
   if (method === 'GET') return page({ title, noindex: false, description: 'Log in to the members\' portal.', body: P.loginPage(S, { notice }) });
   if (method !== 'POST') return notAllowed();
   const f = (await readForm(req)) || {};
-  const fail = msg => page({ title, body: P.loginPage(S, { form: { type: 'login', values: { email: clean(f.email, 120) }, errors: { form: msg } } }) }, { status: 400 });
+  const fail = msg => page({ title, body: P.loginPage(S, { form: { type: 'login', values: { email: str(f.email, 120) }, errors: { form: msg } } }) }, { status: 400 });
   const rl = await limit(env, req, 'mlogin', 10, 900);
   if (rl.blocked) return fail('Too many attempts. Please wait 15 minutes and try again.');
-  const email = clean(f.email, 120).toLowerCase();
+  const email = str(f.email, 120).trim().toLowerCase();
   const m = EMAIL_RE.test(email) ? await mediumByEmail(env, email) : null;
-  const ok = await verifyPassword(String(f.password || '').slice(0, 200), m ? m.hash : '');
+  const ok = await verifyPassword(str(f.password), m ? m.hash : '');
   if (!m || !ok) { await rl.hit(); return fail('That email and password don\'t match. Please try again.'); }
   await rl.clear();
   m.lastLoginAt = new Date().toISOString();
@@ -239,7 +241,7 @@ async function memberReset(req, env, url, method, S, page, token) {
   if (method !== 'POST') return notAllowed();
   if (!m) return page({ title, noindex: true, body: P.resetPage(S, { valid: false, token }) }, opts);
   const f = (await readForm(req)) || {};
-  const pw = String(f.password || '');
+  const pw = str(f.password);
   const pp = passwordProblem(pw, m.name, m.email.split('@')[0]);
   if (pp) return page({ title, noindex: true, body: P.resetPage(S, { valid: true, token, form: { type: 'reset', values: {}, errors: { password: pp } } }) }, { ...opts, status: 400 });
   m.hash = await hashPassword(pw); m.ver = (m.ver || 1) + 1;
@@ -301,10 +303,10 @@ async function account(req, env, url, method, S, page, m) {
   if (f.action === 'password') {
     const rl = await limit(env, req, 'mpass', 10, 900);
     if (rl.blocked) return show({ form: { type: 'password', values: {}, errors: { form: 'Too many attempts. Please wait 15 minutes.' } } }, 429);
-    if (!await verifyPassword(String(f.current || '').slice(0, 200), m.hash)) { await rl.hit(); return show({ form: { type: 'password', values: {}, errors: { current: 'Your current password isn\'t right.' } } }, 400); }
-    const pp = passwordProblem(String(f.password || ''), m.name, m.email.split('@')[0]);
+    if (!await verifyPassword(str(f.current), m.hash)) { await rl.hit(); return show({ form: { type: 'password', values: {}, errors: { current: 'Your current password isn\'t right.' } } }, 400); }
+    const pp = passwordProblem(str(f.password), m.name, m.email.split('@')[0]);
     if (pp) return show({ form: { type: 'password', values: {}, errors: { password: pp } } }, 400);
-    m.hash = await hashPassword(String(f.password)); m.ver = (m.ver || 1) + 1;
+    m.hash = await hashPassword(str(f.password)); m.ver = (m.ver || 1) + 1;
     await putMedium(env, m);
     await endSession(req, env, 'member');
     return redirect('/members/account/?saved=password', 303, [await memberCookie(env, m)]);
@@ -312,7 +314,7 @@ async function account(req, env, url, method, S, page, m) {
   if (f.action === 'delete') {
     const rl = await limit(env, req, 'mpass', 10, 900);
     if (rl.blocked) return show({ deleteError: 'Too many attempts. Please wait 15 minutes.' }, 429);
-    if (!await verifyPassword(String(f.password || '').slice(0, 200), m.hash)) { await rl.hit(); return show({ deleteError: 'That password isn\'t right.' }, 400); }
+    if (!await verifyPassword(str(f.password).slice(0, 200), m.hash)) { await rl.hit(); return show({ deleteError: 'That password isn\'t right.' }, 400); }
     await deleteMedium(env, m);
     await log(env, req, 'member', `${m.name} deleted their own account`);
     return redirect('/members/login/?deleted=1', 303, [await endSession(req, env, 'member')]);
@@ -525,11 +527,11 @@ async function admin(req, env, url, method) {
     const rl = await limit(env, req, 'setup', 5, 3600);
     if (rl.blocked) return respond(form('Too many attempts. Please wait an hour.'));
     const f = (await readForm(req)) || {};
-    const user = clean(f.user, 32).toLowerCase();
-    if (!await safeEqual(String(f.code || ''), String(env.SETUP_CODE))) { await rl.hit(); return respond(form('That setup code isn\'t right.', user)); }
+    const user = str(f.user, 64).trim().toLowerCase();
+    if (!await safeEqual(str(f.code), String(env.SETUP_CODE))) { await rl.hit(); return respond(form('That setup code isn\'t right.', user)); }
     if (!USER_RE.test(user)) return respond(form('Please choose a username of 2 to 32 lower-case letters or numbers.', user));
-    const pp = passwordProblem(String(f.password || ''), user); if (pp) return respond(form(pp, user));
-    await env.KV.put('admin:' + user, JSON.stringify({ user, hash: await hashPassword(String(f.password)), ver: 1, createdAt: new Date().toISOString() }));
+    const pp = passwordProblem(str(f.password), user); if (pp) return respond(form(pp, user));
+    await env.KV.put('admin:' + user, JSON.stringify({ user, hash: await hashPassword(str(f.password)), ver: 1, createdAt: new Date().toISOString() }));
     await env.KV.put('admins', JSON.stringify([user]));
     await log(env, req, user, 'Created the first admin login');
     return respond(redirect('/admin/', 303, [await createSession(env, 'admin', { user, ver: 1 })]));
@@ -541,13 +543,13 @@ async function admin(req, env, url, method) {
     const form = (e = '', u = '') => adminPage(url, 'Admin login', `${err(e)}<form method="post" action="/admin/login/"><label for="user">Username</label><input id="user" name="user" value="${esc(u)}" autocomplete="username" autocapitalize="none" required><label for="pw">Password</label><input id="pw" name="password" type="password" autocomplete="current-password" required><button type="submit">Log in</button></form>`, e ? 400 : 200);
     if (method === 'GET') return respond(form());
     const f = (await readForm(req)) || {};
-    const user = clean(f.user, 32).toLowerCase();
+    const user = str(f.user, 64).trim().toLowerCase();
     const rl = await limit(env, req, 'alogin', 8, 900);
     const lockKey = 'afail:' + await sha256hex(user);
     const fails = parseInt(await env.KV.get(lockKey), 10) || 0;
     if (rl.blocked || fails >= 10) return respond(form('Too many attempts. Please wait 15 minutes and try again.', user));
     const a = USER_RE.test(user) ? await env.KV.get('admin:' + user, 'json') : null;
-    const ok = await verifyPassword(String(f.password || '').slice(0, 200), a ? a.hash : '');
+    const ok = await verifyPassword(str(f.password), a ? a.hash : '');
     if (!a || !ok) { await rl.hit(); await env.KV.put(lockKey, String(fails + 1), { expirationTtl: 900 }); await log(env, req, user || '(blank)', 'Failed admin login'); return respond(form('That username and password don\'t match.', user)); }
     await rl.clear(); await env.KV.delete(lockKey);
     a.lastLoginAt = new Date().toISOString(); await env.KV.put('admin:' + user, JSON.stringify(a));
@@ -704,13 +706,13 @@ async function api(req, env, url, method, a, p) {
     return json({ admins: out });
   }
   if (p === 'admins' && method === 'POST') {
-    const user = clean(body.user, 32).toLowerCase();
+    const user = str(body.user, 64).trim().toLowerCase();
     if (!USER_RE.test(user)) return json({ error: 'Usernames are 2 to 32 lower-case letters, numbers, dots or dashes.' }, 400);
     const list = await adminList(env);
     if (list.includes(user)) return json({ error: 'That username is taken.' }, 400);
     if (list.length >= 10) return json({ error: 'You can have up to 10 admin logins.' }, 400);
-    const pp = passwordProblem(String(body.password || ''), user); if (pp) return json({ error: pp }, 400);
-    await env.KV.put('admin:' + user, JSON.stringify({ user, hash: await hashPassword(String(body.password)), ver: 1, createdAt: new Date().toISOString(), createdBy: a.user }));
+    const pp = passwordProblem(str(body.password), user); if (pp) return json({ error: pp }, 400);
+    await env.KV.put('admin:' + user, JSON.stringify({ user, hash: await hashPassword(str(body.password)), ver: 1, createdAt: new Date().toISOString(), createdBy: a.user }));
     await env.KV.put('admins', JSON.stringify(list.concat(user)));
     await log(env, req, a.user, `Added admin login "${user}"`);
     return json({ ok: true });
@@ -727,9 +729,9 @@ async function api(req, env, url, method, a, p) {
   if (p === 'password' && method === 'POST') {
     const rl = await limit(env, req, 'apass', 8, 900);
     if (rl.blocked) return json({ error: 'Too many attempts. Please wait 15 minutes.' }, 429);
-    if (!await verifyPassword(String(body.current || '').slice(0, 200), a.hash)) { await rl.hit(); return json({ error: 'Your current password isn\'t right.' }, 400); }
-    const pp = passwordProblem(String(body.password || ''), a.user); if (pp) return json({ error: pp }, 400);
-    a.hash = await hashPassword(String(body.password)); a.ver = (a.ver || 1) + 1;
+    if (!await verifyPassword(str(body.current), a.hash)) { await rl.hit(); return json({ error: 'Your current password isn\'t right.' }, 400); }
+    const pp = passwordProblem(str(body.password), a.user); if (pp) return json({ error: pp }, 400);
+    a.hash = await hashPassword(str(body.password)); a.ver = (a.ver || 1) + 1;
     await env.KV.put('admin:' + a.user, JSON.stringify(a));
     await endSession(req, env, 'admin');
     await log(env, req, a.user, 'Changed password (other devices logged out)');
